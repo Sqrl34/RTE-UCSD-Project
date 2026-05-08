@@ -29,10 +29,20 @@ const getSeverityColor = (level) => {
   return "#2e8540"; // green
 };
 
+const getSeverityShortLabel = (level) => {
+  if (level >= 9) return "Critical risk";
+  if (level === 8) return "Very high risk";
+  if (level === 7) return "High risk";
+  if (level === 6) return "Elevated risk";
+  if (level === 5) return "Moderate risk";
+  if (level === 4) return "Guarded risk";
+  return "Low risk";
+};
+
 export default function App() {
   const [selectedCrewId, setSelectedCrewId] = useState(null);
   const [focusedCrewId, setFocusedCrewId] = useState(null);
-  const [isRiskPanelOpen, setIsRiskPanelOpen] = useState(true);
+  const [isRiskPanelOpen, setIsRiskPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const selectedCrew = mockCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
   const cardRefs = useRef({});
@@ -224,53 +234,58 @@ export default function App() {
                 cursor: "pointer",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "16px",
+                }}
+              >
                 <h2 style={{ fontSize: "22px", fontWeight: "700", margin: 0, color: "#112e51" }}>
                   {crew.unit_id}
                 </h2>
 
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setSelectedCrewId(crew.unit_id);
-                    setFocusedCrewId(crew.unit_id);
-                  }}
-                  aria-expanded={selectedCrewId === crew.unit_id}
-                  aria-label={`Severity ${crew.risk_score} out of 10. Click to view all levels.`}
+                <div
                   style={{
-                    background: "#ffffff",
-                    color: "#112e51",
-                    borderRadius: "999px",
-                    padding: "4px 8px 4px 10px",
-                    fontWeight: "700",
-                    height: "fit-content",
-                    border: "2px solid #205493",
-                    cursor: "pointer",
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "8px",
-                    boxShadow: "0 0 0 2px rgba(32, 84, 147, 0.15)",
+                    gap: "10px",
+                    minWidth: 0,
+                    color: "#112e51",
                   }}
                 >
-                  <span style={{ fontSize: "12px", letterSpacing: "0.2px" }}>Risk:</span>
                   <span
                     style={{
-                      width: "24px",
-                      height: "24px",
+                      margin: 0,
+                      fontSize: "17px",
+                      lineHeight: 1.1,
+                      fontWeight: "700",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {getSeverityShortLabel(crew.risk_score)}
+                  </span>
+                  <span
+                    style={{
+                      width: "30px",
+                      height: "30px",
                       borderRadius: "999px",
                       background: getSeverityColor(crew.risk_score),
                       color: "#ffffff",
                       display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "13px",
+                      fontSize: "16px",
                       fontWeight: "800",
+                      flexShrink: 0,
                     }}
                   >
                     {crew.risk_score}
                   </span>
-                </button>
+                </div>
               </div>
 
               <p><strong>Last seen:</strong> {crew.last_seen_minutes} min ago</p>

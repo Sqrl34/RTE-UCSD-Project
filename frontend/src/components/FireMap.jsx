@@ -10,9 +10,10 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const riskColor = (score) => {
-  if (score >= 8) return "#dc2626";
-  if (score >= 6) return "#f97316";
-  return "#16a34a";
+  if (score >= 8) return "#cd2026";
+  if (score >= 6) return "#e59323";
+  if (score === 5) return "#eab308";
+  return "#2e8540";
 };
 
 const createCrewIcon = (crew, isSelected = false) =>
