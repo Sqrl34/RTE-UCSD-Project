@@ -15,7 +15,7 @@ const riskColor = (score) => {
   return "#16a34a";
 };
 
-const createCrewIcon = (crew) =>
+const createCrewIcon = (crew, isSelected = false) =>
   L.divIcon({
     className: "crew-marker",
     html: `
@@ -23,20 +23,20 @@ const createCrewIcon = (crew) =>
         background:${riskColor(crew.risk_score)};
         color:white;
         border-radius:999px;
-        width:36px;
-        height:36px;
+        width:${isSelected ? "44px" : "36px"};
+        height:${isSelected ? "44px" : "36px"};
         display:flex;
         align-items:center;
         justify-content:center;
         font-weight:700;
-        border:2px solid white;
-        box-shadow:0 2px 8px rgba(0,0,0,0.35);
+        border:${isSelected ? "3px solid #205493" : "2px solid white"};
+        box-shadow:${isSelected ? "0 0 0 4px rgba(32,84,147,0.25), 0 4px 10px rgba(0,0,0,0.35)" : "0 2px 8px rgba(0,0,0,0.35)"};
       ">
         ${crew.risk_score}
       </div>
     `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+    iconSize: isSelected ? [44, 44] : [36, 36],
+    iconAnchor: isSelected ? [22, 22] : [18, 18],
   });
 
 const cameraIcon = L.divIcon({
@@ -89,6 +89,7 @@ export default function FireMap({
   escapeRoutes = [],
   cameraLocations = [],
   windArrows = [],
+  selectedCrewId = null,
   onCrewSelect = () => {},
 }) {
   return (
@@ -148,7 +149,7 @@ export default function FireMap({
           <Marker
             key={crew.unit_id}
             position={[crew.lat, crew.lon]}
-            icon={createCrewIcon(crew)}
+            icon={createCrewIcon(crew, selectedCrewId === crew.unit_id)}
             eventHandlers={{
               click: () => onCrewSelect(crew.unit_id),
             }}

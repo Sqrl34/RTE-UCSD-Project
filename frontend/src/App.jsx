@@ -23,16 +23,18 @@ const severityLevels = [
 ];
 
 const getSeverityColor = (level) => {
-  if (level >= 8) return "#cd2026";
-  if (level >= 6) return "#e59323";
-  return "#2e8540";
+  if (level >= 8) return "#cd2026"; // red
+  if (level >= 6) return "#e59323"; // orange
+  if (level === 5) return "#eab308"; // yellow for level 5
+  return "#2e8540"; // green
 };
 
 export default function App() {
-  const [expandedSeverityCrew, setExpandedSeverityCrew] = useState(null);
+  const [selectedCrewId, setSelectedCrewId] = useState(null);
   const [focusedCrewId, setFocusedCrewId] = useState(null);
+  const [isRiskPanelOpen, setIsRiskPanelOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const selectedCrew = mockCrews.find((crew) => crew.unit_id === expandedSeverityCrew) ?? null;
+  const selectedCrew = mockCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
   const cardRefs = useRef({});
   const sortedCrews = useMemo(() => {
     const crews = [...mockCrews];
@@ -48,6 +50,7 @@ export default function App() {
   }, [searchQuery, sortedCrews]);
 
   const focusCrewCard = (unitId) => {
+    setSelectedCrewId(unitId);
     setFocusedCrewId(unitId);
     setSearchQuery("");
     requestAnimationFrame(() => {
@@ -149,6 +152,7 @@ export default function App() {
             escapeRoutes={escapeRoutes}
             cameraLocations={cameraLocations}
             windArrows={windArrows}
+            selectedCrewId={selectedCrewId}
             onCrewSelect={focusCrewCard}
           />
         </div>
@@ -206,6 +210,10 @@ export default function App() {
               ref={(el) => {
                 cardRefs.current[crew.unit_id] = el;
               }}
+              onClick={() => {
+                setSelectedCrewId(crew.unit_id);
+                setFocusedCrewId(crew.unit_id);
+              }}
               style={{
                 background: "#ffffff",
                 border: "1px solid #aeb0b5",
@@ -213,6 +221,7 @@ export default function App() {
                 padding: "16px",
                 boxShadow: focusedCrewId === crew.unit_id ? "0 0 0 2px #205493 inset" : "none",
                 textAlign: "left",
+                cursor: "pointer",
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
@@ -222,12 +231,12 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setExpandedSeverityCrew((current) =>
-                      current === crew.unit_id ? null : crew.unit_id
-                    )
-                  }
-                  aria-expanded={expandedSeverityCrew === crew.unit_id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedCrewId(crew.unit_id);
+                    setFocusedCrewId(crew.unit_id);
+                  }}
+                  aria-expanded={selectedCrewId === crew.unit_id}
                   aria-label={`Severity ${crew.risk_score} out of 10. Click to view all levels.`}
                   style={{
                     background: "#ffffff",
@@ -290,6 +299,119 @@ export default function App() {
       </section>
 
       <aside
+        aria-hidden={!isRiskPanelOpen}
+        style={{
+          position: "absolute",
+          top: "96px",
+          right: "16px",
+          width: "460px",
+          maxWidth: "calc(100% - 32px)",
+          maxHeight: "80vh",
+          background: "#ffffff",
+          border: "1px solid #9fb3c8",
+          boxShadow: "0 10px 24px rgba(17, 46, 81, 0.2)",
+          transform: isRiskPanelOpen ? "translateY(0)" : "translateY(-12px)",
+          opacity: isRiskPanelOpen ? 1 : 0,
+          pointerEvents: isRiskPanelOpen ? "auto" : "none",
+          transition: "opacity 180ms ease, transform 180ms ease",
+          zIndex: 900,
+          borderRadius: "8px",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "12px 14px",
+            borderBottom: "1px solid #c7d2de",
+            background: "linear-gradient(180deg, #f5f9fe 0%, #edf3fa 100%)",
+          }}
+        >
+          <div>
+            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#112e51" }}>
+              Risk Descriptions
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsRiskPanelOpen(false)}
+            style={{
+              border: "1px solid #8aa1ba",
+              background: "#ffffff",
+              color: "#112e51",
+              borderRadius: "4px",
+              padding: "5px 10px",
+              cursor: "pointer",
+              fontWeight: "700",
+            }}
+          >
+            Close
+          </button>
+        </div>
+        <div style={{ padding: "10px 12px", overflowY: "auto", maxHeight: "calc(80vh - 58px)", display: "grid", gap: "8px", background: "#fcfdff" }}>
+          {severityLevels.map((item) => (
+            <div
+              key={`risk-panel-${item.level}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "34px minmax(0, 1fr)",
+                alignItems: "center",
+                gap: "10px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "6px",
+                background: "#ffffff",
+                padding: "8px 10px",
+              }}
+            >
+              <div
+                style={{
+                  width: "30px",
+                  height: "30px",
+                  borderRadius: "999px",
+                  color: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: "700",
+                  background: getSeverityColor(item.level),
+                  boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.2)",
+                }}
+              >
+                {item.level}
+              </div>
+              <p style={{ margin: 0, color: "#1b1b1b", lineHeight: 1.25, fontSize: "14px" }}>
+                {item.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {!isRiskPanelOpen && (
+        <button
+          type="button"
+          onClick={() => setIsRiskPanelOpen(true)}
+          style={{
+            position: "absolute",
+            top: "96px",
+            right: "16px",
+            zIndex: 901,
+            border: "2px solid #205493",
+            background: "#ffffff",
+            color: "#112e51",
+            borderRadius: "999px",
+            padding: "8px 12px",
+            fontWeight: "700",
+            cursor: "pointer",
+          }}
+        >
+          Risk Descriptions
+        </button>
+      )}
+
+      <aside
         aria-hidden={selectedCrew === null}
         style={{
           position: "fixed",
@@ -320,7 +442,7 @@ export default function App() {
         >
           <div>
             <p style={{ margin: 0, fontSize: "12px", textTransform: "uppercase", color: "#3d4551" }}>
-              Severity Scale
+              Crew Detail
             </p>
             <h3 style={{ margin: "4px 0 0 0", color: "#112e51" }}>
               {selectedCrew ? selectedCrew.unit_id : "Crew"}
@@ -328,7 +450,7 @@ export default function App() {
           </div>
           <button
             type="button"
-            onClick={() => setExpandedSeverityCrew(null)}
+            onClick={() => setSelectedCrewId(null)}
             style={{
               border: "1px solid #aeb0b5",
               background: "#ffffff",
@@ -344,56 +466,25 @@ export default function App() {
         </div>
 
         <div style={{ padding: "14px 16px 20px 16px", overflowY: "auto", display: "grid", gap: "10px" }}>
-          {severityLevels.map((item) => {
-            const color = getSeverityColor(item.level);
-            const active = selectedCrew?.risk_score === item.level;
-
-            return (
-              <div
-                key={item.level}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "44px minmax(0, 1fr)",
-                  alignItems: "center",
-                  gap: "10px",
-                  padding: "10px 8px",
-                  borderBottom: "1px solid #e6e6e6",
-                  background: active ? "#eaf4ff" : "#ffffff",
-                  borderLeft: active ? "4px solid #205493" : "4px solid transparent",
-                }}
-              >
-                <div
-                  style={{
-                    width: "34px",
-                    height: "34px",
-                    borderRadius: "999px",
-                    border: `2px solid ${color}`,
-                    color: "#ffffff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: "700",
-                    background: color,
-                  }}
-                >
-                  {item.level}
-                </div>
-                <p
-                  style={{
-                    margin: 0,
-                    color: active ? "#112e51" : "#1b1b1b",
-                    fontWeight: active ? "700" : "400",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    lineHeight: 1.25,
-                  }}
-                >
-                  {item.description}
-                </p>
-              </div>
-            );
-          })}
+          {selectedCrew && (
+            <div
+              style={{
+                border: "1px solid #aeb0b5",
+                borderRadius: "4px",
+                padding: "12px",
+                background: "#f8fbff",
+                display: "grid",
+                gap: "6px",
+              }}
+            >
+              <p style={{ margin: 0 }}><strong>Unit:</strong> {selectedCrew.unit_id}</p>
+              <p style={{ margin: 0 }}><strong>Risk:</strong> {selectedCrew.risk_score}/10</p>
+              <p style={{ margin: 0 }}><strong>Last seen:</strong> {selectedCrew.last_seen_minutes} min ago</p>
+              <p style={{ margin: 0 }}><strong>Battery:</strong> {selectedCrew.battery}%</p>
+              <p style={{ margin: 0 }}><strong>Primary reason:</strong> {selectedCrew.primary_reason}</p>
+              <p style={{ margin: 0 }}><strong>Comms summary:</strong> {selectedCrew.transcript}</p>
+            </div>
+          )}
         </div>
       </aside>
     </main>
