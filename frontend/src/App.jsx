@@ -1,122 +1,120 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import "leaflet/dist/leaflet.css";
+import FireMap from "./components/FireMap";
+import { mockCrews } from "./data/mockCrews";
+import {
+  hazardZone,
+  escapeRoutes,
+  cameraLocations,
+  windArrows,
+} from "./data/mockMapData";
 
-function App() {
-  const [count, setCount] = useState(0)
-
+export default function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+    <main style={{ minHeight: "100vh", background: "#f8fafc", padding: "24px" }}>
+      <div style={{ marginBottom: "24px", textAlign: "center" }}>
+        <h1 style={{ fontSize: "42px", fontWeight: "800", marginBottom: "8px" }}>
+          Fireline Breadcrumb Command Dashboard
+        </h1>
+
+        <p
+          style={{
+            fontSize: "18px",
+            color: "#64748b",
+            maxWidth: "1100px",
+            margin: "0 auto",
+          }}
         >
-          Count is {count}
-        </button>
-      </section>
+          AI-assisted wildfire situational awareness for dismounted crews. This
+          dashboard shows crew locations, risk scores, hazard zones, wind
+          conditions, camera summaries, and escape route options for incident
+          command review.
+        </p>
+      </div>
 
-      <div className="ticks"></div>
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 2fr) 390px",
+          gap: "24px",
+          alignItems: "start",
+          maxWidth: "1400px",
+          margin: "0 auto",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <h2 style={{ fontSize: "24px", fontWeight: "700", marginBottom: "12px" }}>
+            Live Field Map
+          </h2>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+          <FireMap
+            crews={mockCrews}
+            hazardZone={hazardZone}
+            escapeRoutes={escapeRoutes}
+            cameraLocations={cameraLocations}
+            windArrows={windArrows}
+          />
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <aside style={{ display: "grid", gap: "16px" }}>
+          {mockCrews.map((crew) => (
+            <div
+              key={crew.unit_id}
+              style={{
+                background: "white",
+                border: "1px solid #e2e8f0",
+                borderRadius: "16px",
+                padding: "16px",
+                boxShadow: "0 2px 8px rgba(15, 23, 42, 0.08)",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+                <h2 style={{ fontSize: "22px", fontWeight: "700", margin: 0 }}>
+                  {crew.unit_id}
+                </h2>
+
+                <span
+                  style={{
+                    background:
+                      crew.risk_score >= 8
+                        ? "#dc2626"
+                        : crew.risk_score >= 6
+                        ? "#f97316"
+                        : "#16a34a",
+                    color: "white",
+                    borderRadius: "999px",
+                    padding: "4px 12px",
+                    fontWeight: "800",
+                    height: "fit-content",
+                  }}
+                >
+                  {crew.risk_score}/10
+                </span>
+              </div>
+
+              <p><strong>Last seen:</strong> {crew.last_seen_minutes} min ago</p>
+              <p><strong>Battery:</strong> {crew.battery}%</p>
+              <p><strong>Primary reason:</strong> {crew.primary_reason}</p>
+              <p><strong>Comms summary:</strong> {crew.transcript}</p>
+
+              {crew.last_seen_minutes > 5 && (
+                <p
+                  style={{
+                    background: "#fef2f2",
+                    color: "#b91c1c",
+                    padding: "8px",
+                    borderRadius: "8px",
+                    fontWeight: "700",
+                    textAlign: "center",
+                  }}
+                >
+                  Stale location alert. Command should verify status.
+                </p>
+              )}
+            </div>
+          ))}
+        </aside>
+      </section>
+    </main>
+  );
 }
-
-export default App
