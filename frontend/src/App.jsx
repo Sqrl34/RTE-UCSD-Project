@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import FireMap from "./components/FireMap";
 import { mockCrews } from "./data/mockCrews";
@@ -30,14 +30,42 @@ const getSeverityColor = (level) => {
 
 export default function App() {
   const [expandedSeverityCrew, setExpandedSeverityCrew] = useState(null);
+  const [focusedCrewId, setFocusedCrewId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const selectedCrew = mockCrews.find((crew) => crew.unit_id === expandedSeverityCrew) ?? null;
+  const cardRefs = useRef({});
+  const sortedCrews = useMemo(() => {
+    const crews = [...mockCrews];
+
+    crews.sort((a, b) => b.risk_score - a.risk_score || b.last_seen_minutes - a.last_seen_minutes);
+
+    return crews;
+  }, []);
+  const filteredCrews = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sortedCrews;
+    return sortedCrews.filter((crew) => crew.unit_id.toLowerCase().includes(query));
+  }, [searchQuery, sortedCrews]);
+
+  const focusCrewCard = (unitId) => {
+    setFocusedCrewId(unitId);
+    setSearchQuery("");
+    requestAnimationFrame(() => {
+      const cardEl = cardRefs.current[unitId];
+      if (!cardEl) return;
+      cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
 
   return (
     <main
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         background: "#ffffff",
         fontFamily: '"Source Sans Pro", "Segoe UI", Arial, sans-serif',
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
       }}
     >
       <header
@@ -46,7 +74,8 @@ export default function App() {
           color: "#ffffff",
           borderBottom: "4px solid #205493",
           padding: "16px 24px 20px 24px",
-          marginBottom: "24px",
+          marginBottom: "16px",
+          flexShrink: 0,
         }}
       >
         <div style={{ maxWidth: "980px", margin: "0 auto", textAlign: "center" }}>
@@ -92,10 +121,13 @@ export default function App() {
           display: "grid",
           gridTemplateColumns: "minmax(0, 2fr) 390px",
           gap: "24px",
-          alignItems: "start",
+          alignItems: "stretch",
           width: "100%",
-          padding: "0 24px 24px 24px",
+          padding: "0 24px 16px 24px",
           boxSizing: "border-box",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -117,19 +149,69 @@ export default function App() {
             escapeRoutes={escapeRoutes}
             cameraLocations={cameraLocations}
             windArrows={windArrows}
+            onCrewSelect={focusCrewCard}
           />
         </div>
 
-        <aside style={{ display: "grid", gap: "16px" }}>
-          {mockCrews.map((crew) => (
+        <aside
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+            overflowY: "auto",
+            minHeight: 0,
+            paddingRight: "4px",
+            alignItems: "stretch",
+          }}
+        >
+          <div
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 5,
+              background: "#ffffff",
+              border: "1px solid #aeb0b5",
+              borderRadius: "4px",
+              padding: "10px 12px",
+              flexShrink: 0,
+            }}
+          >
+            <label
+              htmlFor="crew-name-search"
+              style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#3d4551", marginBottom: "6px" }}
+            >
+              SEARCH CREW
+            </label>
+            <input
+              id="crew-name-search"
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Type crew name (e.g. Alpha-3)"
+              style={{
+                width: "100%",
+                border: "1px solid #5c5c5c",
+                borderRadius: "4px",
+                padding: "8px",
+                fontWeight: "600",
+                color: "#112e51",
+                background: "#ffffff",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          {filteredCrews.map((crew) => (
             <div
               key={crew.unit_id}
+              ref={(el) => {
+                cardRefs.current[crew.unit_id] = el;
+              }}
               style={{
                 background: "#ffffff",
                 border: "1px solid #aeb0b5",
                 borderRadius: "4px",
                 padding: "16px",
-                boxShadow: "none",
+                boxShadow: focusedCrewId === crew.unit_id ? "0 0 0 2px #205493 inset" : "none",
                 textAlign: "left",
               }}
             >

@@ -89,6 +89,7 @@ export default function FireMap({
   escapeRoutes = [],
   cameraLocations = [],
   windArrows = [],
+  onCrewSelect = () => {},
 }) {
   return (
     <div
@@ -148,6 +149,9 @@ export default function FireMap({
             key={crew.unit_id}
             position={[crew.lat, crew.lon]}
             icon={createCrewIcon(crew)}
+            eventHandlers={{
+              click: () => onCrewSelect(crew.unit_id),
+            }}
           >
             <Popup>
               <strong>{crew.unit_id}</strong>
