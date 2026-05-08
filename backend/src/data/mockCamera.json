@@ -1,0 +1,10 @@
+{
+  "camera_id": "UCSD-Ridge-East",
+  "camera_available": true,
+  "smoke_detected": true,
+  "fire_detected": false,
+  "visibility_status": "reduced",
+  "camera_caption": "Smoke increasing near eastern ridge.",
+  "condition_change": "worse_than_10_minutes_ago",
+  "image_url": "/sample-camera/ridge-east.jpg"
+}
