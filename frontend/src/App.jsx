@@ -1,3 +1,4 @@
+import { useState } from "react";
 import "leaflet/dist/leaflet.css";
 import FireMap from "./components/FireMap";
 import { mockCrews } from "./data/mockCrews";
@@ -8,7 +9,29 @@ import {
   windArrows,
 } from "./data/mockMapData";
 
+const severityLevels = [
+  { level: 1, description: "Minimal risk. Routine monitoring only." },
+  { level: 2, description: "Very low risk. Conditions stable." },
+  { level: 3, description: "Low risk. Stay alert for changes." },
+  { level: 4, description: "Guarded risk. Monitor nearby hazards." },
+  { level: 5, description: "Moderate risk. Prepare contingency actions." },
+  { level: 6, description: "Elevated risk. Increase check-ins with crew." },
+  { level: 7, description: "High risk. Command review recommended." },
+  { level: 8, description: "Very high risk. Immediate mitigation advised." },
+  { level: 9, description: "Critical risk. Prioritize evacuation planning." },
+  { level: 10, description: "Extreme risk. Execute emergency response now." },
+];
+
+const getSeverityColor = (level) => {
+  if (level >= 8) return "#cd2026";
+  if (level >= 6) return "#e59323";
+  return "#2e8540";
+};
+
 export default function App() {
+  const [expandedSeverityCrew, setExpandedSeverityCrew] = useState(null);
+  const selectedCrew = mockCrews.find((crew) => crew.unit_id === expandedSeverityCrew) ?? null;
+
   return (
     <main
       style={{
@@ -115,23 +138,48 @@ export default function App() {
                   {crew.unit_id}
                 </h2>
 
-                <span
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedSeverityCrew((current) =>
+                      current === crew.unit_id ? null : crew.unit_id
+                    )
+                  }
+                  aria-expanded={expandedSeverityCrew === crew.unit_id}
+                  aria-label={`Severity ${crew.risk_score} out of 10. Click to view all levels.`}
                   style={{
-                    background:
-                      crew.risk_score >= 8
-                        ? "#cd2026"
-                        : crew.risk_score >= 6
-                        ? "#e59323"
-                        : "#2e8540",
-                    color: "#ffffff",
-                    borderRadius: "2px",
-                    padding: "4px 10px",
+                    background: "#ffffff",
+                    color: "#112e51",
+                    borderRadius: "999px",
+                    padding: "4px 8px 4px 10px",
                     fontWeight: "700",
                     height: "fit-content",
+                    border: "2px solid #205493",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    boxShadow: "0 0 0 2px rgba(32, 84, 147, 0.15)",
                   }}
                 >
-                  {crew.risk_score}/10
-                </span>
+                  <span style={{ fontSize: "12px", letterSpacing: "0.2px" }}>Risk:</span>
+                  <span
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "999px",
+                      background: getSeverityColor(crew.risk_score),
+                      color: "#ffffff",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "13px",
+                      fontWeight: "800",
+                    }}
+                  >
+                    {crew.risk_score}
+                  </span>
+                </button>
               </div>
 
               <p><strong>Last seen:</strong> {crew.last_seen_minutes} min ago</p>
@@ -158,6 +206,114 @@ export default function App() {
           ))}
         </aside>
       </section>
+
+      <aside
+        aria-hidden={selectedCrew === null}
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          width: "520px",
+          maxWidth: "100%",
+          height: "100vh",
+          background: "#ffffff",
+          borderLeft: "2px solid #205493",
+          boxShadow: "-6px 0 18px rgba(0, 0, 0, 0.2)",
+          transform: selectedCrew ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 220ms ease",
+          zIndex: 1000,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "16px",
+            borderBottom: "1px solid #aeb0b5",
+            background: "#f0f6fb",
+          }}
+        >
+          <div>
+            <p style={{ margin: 0, fontSize: "12px", textTransform: "uppercase", color: "#3d4551" }}>
+              Severity Scale
+            </p>
+            <h3 style={{ margin: "4px 0 0 0", color: "#112e51" }}>
+              {selectedCrew ? selectedCrew.unit_id : "Crew"}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpandedSeverityCrew(null)}
+            style={{
+              border: "1px solid #aeb0b5",
+              background: "#ffffff",
+              color: "#112e51",
+              borderRadius: "2px",
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontWeight: "700",
+            }}
+          >
+            Close
+          </button>
+        </div>
+
+        <div style={{ padding: "14px 16px 20px 16px", overflowY: "auto", display: "grid", gap: "10px" }}>
+          {severityLevels.map((item) => {
+            const color = getSeverityColor(item.level);
+            const active = selectedCrew?.risk_score === item.level;
+
+            return (
+              <div
+                key={item.level}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "44px minmax(0, 1fr)",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "10px 8px",
+                  borderBottom: "1px solid #e6e6e6",
+                  background: active ? "#eaf4ff" : "#ffffff",
+                  borderLeft: active ? "4px solid #205493" : "4px solid transparent",
+                }}
+              >
+                <div
+                  style={{
+                    width: "34px",
+                    height: "34px",
+                    borderRadius: "999px",
+                    border: `2px solid ${color}`,
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: "700",
+                    background: color,
+                  }}
+                >
+                  {item.level}
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    color: active ? "#112e51" : "#1b1b1b",
+                    fontWeight: active ? "700" : "400",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    lineHeight: 1.25,
+                  }}
+                >
+                  {item.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
     </main>
   );
 }
