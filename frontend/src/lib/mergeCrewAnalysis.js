@@ -34,10 +34,6 @@ export function applyAnalysisToMock(mock, analysisState) {
     ? r.risk_reasons.filter((x) => x != null && String(x).trim() !== "")
     : [];
 
-  const questions = Array.isArray(r.recommended_questions)
-    ? r.recommended_questions.filter((x) => x != null && String(x).trim() !== "")
-    : [];
-
   return {
     ...mock,
     riskSource: "api",
@@ -51,7 +47,6 @@ export function applyAnalysisToMock(mock, analysisState) {
     weather: r.weather && typeof r.weather === "object" ? r.weather : null,
     camera: r.camera && typeof r.camera === "object" ? r.camera : null,
     recommended_command_review: r.recommended_command_review,
-    recommended_questions: questions,
     confidence: r.confidence,
     analyzed_at: r.analyzed_at,
   };

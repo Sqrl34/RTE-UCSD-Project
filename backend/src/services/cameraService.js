@@ -50,7 +50,13 @@ function normalizeCamera(raw, lat, lon) {
 
   const lowerText = `${detectedClass} ${message}`.toLowerCase();
 
-  const hazardDetected = Boolean(raw.overallDetected ?? raw.detected ?? false);
+  const peakConfidence = Number(
+    raw.highestConfidence ?? bestCamera?.confidence ?? 0
+  );
+
+  const hazardDetected =
+    Boolean(raw.overallDetected ?? raw.detected ?? false) &&
+    peakConfidence >= 0.52;
 
   const smokeDetected =
     hazardDetected &&

@@ -23,12 +23,22 @@ const riskScoreLabel = (score) => {
   return Number.isFinite(n) ? String(Math.round(n)) : "?";
 };
 
+const markerBackgroundForCrew = (crew) => {
+  if (crew.riskSource === "pending") return "#94a3b8";
+  return riskColor(crew.risk_score);
+};
+
+const markerLabelForCrew = (crew) => {
+  if (crew.riskSource === "pending") return "";
+  return riskScoreLabel(crew.risk_score);
+};
+
 const createCrewIcon = (crew, isSelected = false) =>
   L.divIcon({
     className: "crew-marker",
     html: `
       <div style="
-        background:${riskColor(crew.risk_score)};
+        background:${markerBackgroundForCrew(crew)};
         color:white;
         border-radius:999px;
         width:${isSelected ? "44px" : "36px"};
@@ -40,7 +50,7 @@ const createCrewIcon = (crew, isSelected = false) =>
         border:${isSelected ? "3px solid #205493" : "2px solid white"};
         box-shadow:${isSelected ? "0 0 0 4px rgba(32,84,147,0.25), 0 4px 10px rgba(0,0,0,0.35)" : "0 2px 8px rgba(0,0,0,0.35)"};
       ">
-        ${riskScoreLabel(crew.risk_score)}
+        ${markerLabelForCrew(crew)}
       </div>
     `,
     iconSize: isSelected ? [44, 44] : [36, 36],

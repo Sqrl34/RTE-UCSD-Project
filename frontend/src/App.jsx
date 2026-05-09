@@ -308,10 +308,14 @@ export default function App() {
                   fontSize: "12px",
                   color: "#205493",
                   fontWeight: "600",
+                  lineHeight: 1.35,
                 }}
               >
-                Live risk analysis in progress ({analysisPendingCount} crew
-                {analysisPendingCount === 1 ? "" : "s"})… typically 2–6s each.
+                {`Live risk analysis in progress (${analysisPendingCount} ${
+                  analysisPendingCount === 1 ? "crew" : "crews"
+                })…`}
+                <br />
+                Typically 2–6s each.
               </p>
             )}
           </div>
@@ -383,30 +387,27 @@ export default function App() {
                         : crew.risk_level ?? getSeverityShortLabel(crew.risk_score)}
                   </span>
 
-                  <span
-                    style={{
-                      width: "30px",
-                      height: "30px",
-                      borderRadius: "999px",
-                      background:
-                        crew.riskSource === "pending"
-                          ? "#94a3b8"
-                          : getSeverityColor(crew.risk_score),
-                      color: "#ffffff",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "16px",
-                      fontWeight: "800",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {crew.riskSource === "pending"
-                      ? "…"
-                      : Number.isFinite(Number(crew.risk_score))
+                  {crew.riskSource !== "pending" && (
+                    <span
+                      style={{
+                        width: "30px",
+                        height: "30px",
+                        borderRadius: "999px",
+                        background: getSeverityColor(crew.risk_score),
+                        color: "#ffffff",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "16px",
+                        fontWeight: "800",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {Number.isFinite(Number(crew.risk_score))
                         ? crew.risk_score
                         : "?"}
-                  </span>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -529,10 +530,6 @@ export default function App() {
                   Requesting full analysis from backend (weather, cameras, AI)…
                 </p>
               )}
-
-              <p style={{ margin: "8px 0" }}>
-                <strong>Comms summary:</strong> {crew.transcript}
-              </p>
 
               {crew.last_seen_minutes > 5 && (
                 <p
@@ -779,7 +776,7 @@ export default function App() {
               <p style={{ margin: 0 }}>
                 <strong>Risk:</strong>{" "}
                 {selectedCrew.riskSource === "pending"
-                  ? "…"
+                  ? "Analyzing — score not ready yet"
                   : `${Number.isFinite(Number(selectedCrew.risk_score)) ? selectedCrew.risk_score : "?"}/10 — ${selectedCrew.risk_level ?? getSeverityShortLabel(selectedCrew.risk_score)}`}
               </p>
 
@@ -912,10 +909,6 @@ export default function App() {
                 </>
               )}
 
-              <p style={{ margin: 0 }}>
-                <strong>Comms summary:</strong> {selectedCrew.transcript}
-              </p>
-
               {selectedCrew.riskSource === "api" &&
                 selectedCrew.recommended_command_review && (
                   <p
@@ -931,24 +924,6 @@ export default function App() {
                     <strong>Recommended command review:</strong>{" "}
                     {selectedCrew.recommended_command_review}
                   </p>
-                )}
-
-              {selectedCrew.riskSource === "api" &&
-                selectedCrew.recommended_questions?.length > 0 && (
-                  <div style={{ margin: 0 }}>
-                    <strong>Suggested questions:</strong>
-                    <ul
-                      style={{
-                        margin: "6px 0 0 0",
-                        paddingLeft: "18px",
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {selectedCrew.recommended_questions.map((q, idx) => (
-                        <li key={`detail-q-${idx}`}>{q}</li>
-                      ))}
-                    </ul>
-                  </div>
                 )}
 
               {selectedCrew.riskSource !== "api" && (
