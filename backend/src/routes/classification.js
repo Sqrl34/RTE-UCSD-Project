@@ -1,5 +1,4 @@
 const express = require("express");
-const fs = require("fs/promises");
 const sharp = require("sharp");
 const FormData = require("form-data");
 
@@ -8,14 +7,60 @@ const fetch = (...args) =>
 
 const router = express.Router();
 
-const IMAGE_PATH =
-  "C:/Users/atwri/Downloads/dllookout.jpg";
+const camerasData = require("../data/alert_california_cameras.json");
 
 const ROBOFLOW_MODEL_URL = "https://detect.roboflow.com/wildfire-smoke/1";
 const ROBOFLOW_CONFIDENCE = 10;
 
+// Smaller radius + camera cap to reduce noise and API calls
+const MAX_DISTANCE_MILES = 5;
+const MAX_CAMERAS = 5;
+
 if (!process.env.ROBOFLOW_API_KEY) {
   console.warn("ROBOFLOW_API_KEY is missing. Set it in backend/.env");
+}
+
+function webMercatorToLatLon(x, y) {
+  const R = 6378137;
+  const lon = (x / R) * (180 / Math.PI);
+  const lat =
+    (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * (180 / Math.PI);
+
+  return { lat, lon };
+}
+
+function getCameraLatLon(camera) {
+  const gx = camera.geometry?.x;
+  const gy = camera.geometry?.y;
+
+  if (gx == null || gy == null) return null;
+
+  return webMercatorToLatLon(gx, gy);
+}
+
+function milesBetween(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function fetchImageBuffer(imageURL) {
+  const response = await fetch(imageURL);
+
+  if (!response.ok) {
+    throw new Error(`Image fetch failed: ${response.status}`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
 }
 
 async function postToRoboflow(imageBuffer) {
@@ -37,8 +82,7 @@ async function postToRoboflow(imageBuffer) {
     headers: form.getHeaders(),
   });
 
-  const json = await response.json();
-  return json;
+  return response.json();
 }
 
 function buildCropRegions(width, height) {
@@ -47,8 +91,6 @@ function buildCropRegions(width, height) {
 
   const centerW = Math.floor(width * 0.6);
   const centerH = Math.floor(height * 0.6);
-  const centerLeft = Math.floor((width - centerW) / 2);
-  const centerTop = Math.floor((height - centerH) / 2);
 
   return [
     { left: 0, top: 0, width, height },
@@ -56,7 +98,12 @@ function buildCropRegions(width, height) {
     { left: 0, top: halfH, width, height: height - halfH },
     { left: 0, top: 0, width: halfW, height },
     { left: halfW, top: 0, width: width - halfW, height },
-    { left: centerLeft, top: centerTop, width: centerW, height: centerH },
+    {
+      left: Math.floor((width - centerW) / 2),
+      top: Math.floor((height - centerH) / 2),
+      width: centerW,
+      height: centerH,
+    },
   ];
 }
 
@@ -69,36 +116,26 @@ async function makeCrop(originalBuffer, region) {
 }
 
 function getBestPrediction(results) {
-  const allPredictions = [];
-
-  for (const result of results) {
-    const preds = result.predictions || [];
-    for (const p of preds) {
-      allPredictions.push(p);
-    }
-  }
-
-  allPredictions.sort((a, b) => b.confidence - a.confidence);
+  const all = results.flatMap((r) => r.predictions || []);
+  all.sort((a, b) => b.confidence - a.confidence);
 
   return {
-    best: allPredictions[0] || null,
-    all: allPredictions,
+    best: all[0] || null,
+    all,
   };
 }
 
-function classifyRisk(bestPrediction, allPredictions) {
-  if (!bestPrediction) {
+// Stricter thresholds to reduce false positives
+function classifyRisk(best) {
+  if (!best || best.confidence < 0.35) {
     return {
       detected: false,
       riskLevel: "none",
-      message: "No smoke or fire detected",
+      message: "No reliable smoke or fire detected",
     };
   }
 
-  const confidence = bestPrediction.confidence;
-  const smokeCount = allPredictions.length;
-
-  if (confidence >= 0.6) {
+  if (best.confidence >= 0.7) {
     return {
       detected: true,
       riskLevel: "high",
@@ -106,7 +143,7 @@ function classifyRisk(bestPrediction, allPredictions) {
     };
   }
 
-  if (confidence >= 0.3 || smokeCount >= 2) {
+  if (best.confidence >= 0.5) {
     return {
       detected: true,
       riskLevel: "medium",
@@ -121,68 +158,128 @@ function classifyRisk(bestPrediction, allPredictions) {
   };
 }
 
-router.post("/:id", async (req, res) => {
-  try {
-    if (req.params.id !== "1") {
-      return res.status(400).json({ error: "invalid id parameter" });
-    }
+async function analyzeCamera(camera) {
+  const imageBuffer = await fetchImageBuffer(camera.imageURL);
+  const metadata = await sharp(imageBuffer).metadata();
 
-    try {
-      await fs.access(IMAGE_PATH);
-    } catch {
-      return res.status(404).json({
-        error: "image file not found",
-        path: IMAGE_PATH,
-      });
-    }
+  if (!metadata.width || !metadata.height) {
+    throw new Error("Invalid image dimensions");
+  }
 
-    const originalBuffer = await fs.readFile(IMAGE_PATH);
-    const metadata = await sharp(originalBuffer).metadata();
+  const crops = buildCropRegions(metadata.width, metadata.height);
+  const results = [];
 
-    const width = metadata.width;
-    const height = metadata.height;
+  for (const region of crops) {
+    const crop = await makeCrop(imageBuffer, region);
+    const result = await postToRoboflow(crop);
+    results.push(result);
+  }
 
-    if (!width || !height) {
-      return res.status(400).json({ error: "invalid image dimensions" });
-    }
+  const { best } = getBestPrediction(results);
+  const risk = classifyRisk(best);
 
-    const cropRegions = buildCropRegions(width, height);
-
-    const results = [];
-
-    for (const region of cropRegions) {
-      const crop = await makeCrop(originalBuffer, region);
-      const result = await postToRoboflow(crop);
-      results.push(result);
-    }
-
-    const { best, all } = getBestPrediction(results);
-    const risk = classifyRisk(best, all);
-
-    const response = best
-      ? {
-          detected: risk.detected,
-          riskLevel: risk.riskLevel,
-          message: risk.message,
-          confidence: Number(best.confidence.toFixed(2)),
-          class: best.class,
-          bbox: {
+  return {
+    cameraName: camera.cameraName,
+    imageURL: camera.imageURL,
+    distanceMiles: Number(camera.distanceMiles.toFixed(2)),
+    detected: risk.detected,
+    riskLevel: risk.riskLevel,
+    message: risk.message,
+    confidence: best ? Number(best.confidence.toFixed(2)) : 0,
+    class: risk.detected && best ? best.class : null,
+    bbox:
+      risk.detected && best
+        ? {
             x: best.x,
             y: best.y,
             width: best.width,
             height: best.height,
-          },
-        }
-      : {
+          }
+        : null,
+  };
+}
+
+function buildOverallSummary(cameraResults) {
+  const validDetections = cameraResults.filter((cam) => cam.detected);
+
+  if (validDetections.length === 0) {
+    return {
+      overallDetected: false,
+      overallRiskLevel: "none",
+      bestCamera: null,
+      highestConfidence: 0,
+      message: "No reliable smoke or fire detected nearby",
+    };
+  }
+
+  const best = validDetections.sort((a, b) => b.confidence - a.confidence)[0];
+
+  return {
+    overallDetected: true,
+    overallRiskLevel: best.riskLevel,
+    bestCamera: best.cameraName,
+    highestConfidence: best.confidence,
+    message: best.message,
+  };
+}
+
+router.post("/", async (req, res) => {
+  try {
+    const lat = Number(req.body.x);
+    const lon = Number(req.body.y);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({
+        error: "Invalid coordinates. Send { x: latitude, y: longitude }.",
+      });
+    }
+
+    const nearby = camerasData
+      .map((camera) => {
+        const coords = getCameraLatLon(camera);
+        if (!coords || !camera.imageURL) return null;
+
+        const distance = milesBetween(lat, lon, coords.lat, coords.lon);
+
+        return {
+          ...camera,
+          distanceMiles: distance,
+        };
+      })
+      .filter((camera) => camera && camera.distanceMiles <= MAX_DISTANCE_MILES)
+      .sort((a, b) => a.distanceMiles - b.distanceMiles)
+      .slice(0, MAX_CAMERAS);
+
+    const cameras = [];
+
+    for (const camera of nearby) {
+      try {
+        const result = await analyzeCamera(camera);
+        cameras.push(result);
+      } catch (err) {
+        cameras.push({
+          cameraName: camera.cameraName,
+          imageURL: camera.imageURL,
+          distanceMiles: Number(camera.distanceMiles.toFixed(2)),
           detected: false,
-          riskLevel: "none",
-          message: "No smoke or fire detected",
+          riskLevel: "unknown",
+          message: "Camera image analysis failed",
           confidence: 0,
           class: null,
           bbox: null,
-        };
+        });
+      }
+    }
 
-    return res.status(200).json(response);
+    const summary = buildOverallSummary(cameras);
+
+    return res.status(200).json({
+      requestedCoordinate: { x: lat, y: lon },
+      radiusMiles: MAX_DISTANCE_MILES,
+      cameraCount: cameras.length,
+      ...summary,
+      cameras,
+    });
   } catch (err) {
     console.error("classification error:", err);
     return res.status(500).json({ error: "internal server error" });
@@ -190,3 +287,50 @@ router.post("/:id", async (req, res) => {
 });
 
 module.exports = router;
+
+// CALL
+// POST http://localhost:5000/api/classification
+// Content-Type: application/json
+// {
+//   "x": 34.148,
+//   "y": -118.289
+// }
+
+// Returns
+// {
+//   "requestedCoordinate": {
+//       "x": 34.148,
+//       "y": -118.289
+//   },
+//   "radiusMiles": 5,
+//   "cameraCount": 2,
+//   "overallDetected": false,
+//   "overallRiskLevel": "none",
+//   "bestCamera": null,
+//   "highestConfidence": 0,
+//   "message": "No reliable smoke or fire detected nearby",
+//   "cameras": [
+//       {
+//           "cameraName": "Verdugo Peak 1",
+//           "imageURL": "https://cameras.alertcalifornia.org/public-camera-data/Axis-VerdugoPeak1/latest-frame.jpg",
+//           "distanceMiles": 4.69,
+//           "detected": false,
+//           "riskLevel": "none",
+//           "message": "No reliable smoke or fire detected",
+//           "confidence": 0.26,
+//           "class": null,
+//           "bbox": null
+//       },
+//       {
+//           "cameraName": "Verdugo Peak 2",
+//           "imageURL": "https://cameras.alertcalifornia.org/public-camera-data/Axis-VerdugoPeak2/latest-frame.jpg",
+//           "distanceMiles": 4.69,
+//           "detected": false,
+//           "riskLevel": "none",
+//           "message": "No reliable smoke or fire detected",
+//           "confidence": 0,
+//           "class": null,
+//           "bbox": null
+//       }
+//   ]
+// }
