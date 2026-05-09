@@ -1,38 +1,30 @@
 const mockWeather = require("../data/mockWeather.json");
+const { buildFusedWeather } = require("../weatherFusion");
 
 async function getWeatherForCoordinates(lat, lon) {
   try {
-    /*
-      CEURTY INTEGRATION GOES HERE LATER.
-
-      Expected Ceurty function shape:
-
-      const weather = await ceurtyGetWeather(lat, lon);
-
-      Expected return:
-      {
-        wind_speed: 18,
-        wind_direction: "W",
-        aqi: 145,
-        temperature: 86,
-        humidity: 22
-      }
-    */
-
+    const fused = await buildFusedWeather(lat, lon);
     return {
-      ...mockWeather,
-      source: "mock_weather",
+      wind_speed: fused.wind_speed_ms,
+      wind_direction: fused.wind_direction_deg,
+      aqi: fused.aqi,
+      temperature: fused.temperature_c,
+      humidity: fused.humidity_pct,
+      rainfall_mm_1h: fused.rainfall_mm_1h,
+      confidence: fused.confidence,
+      sources: fused.sources,
+      conflicts: fused.conflicts,
+      source: "fused_weather",
       lat,
-      lon
+      lon,
     };
   } catch (error) {
-    console.error("Weather service failed:", error.message);
-
+    console.error("Weather fusion failed, falling back to mock:", error.message);
     return {
       ...mockWeather,
       source: "mock_weather_fallback",
       lat,
-      lon
+      lon,
     };
   }
 }
