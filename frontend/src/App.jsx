@@ -1,6 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import FireMap from "./components/FireMap";
+import { analyzeCrew, getApiBaseUrl } from "./api/crewTraceApi";
+import { applyAnalysisToMock } from "./lib/mergeCrewAnalysis";
 import { mockCrews } from "./data/mockCrews";
 import {
   hazardZone,
@@ -23,40 +25,100 @@ const severityLevels = [
 ];
 
 const getSeverityColor = (level) => {
-  if (level >= 8) return "#cd2026";
-  if (level >= 6) return "#e59323";
-  if (level === 5) return "#eab308";
+  const n = Number(level);
+  if (!Number.isFinite(n)) return "#94a3b8";
+  if (n >= 8) return "#cd2026";
+  if (n >= 6) return "#e59323";
+  if (n === 5) return "#eab308";
   return "#2e8540";
 };
 
 const getSeverityShortLabel = (level) => {
-  if (level >= 9) return "Critical risk";
-  if (level === 8) return "Very high risk";
-  if (level === 7) return "High risk";
-  if (level === 6) return "Elevated risk";
-  if (level === 5) return "Moderate risk";
-  if (level === 4) return "Guarded risk";
+  const n = Number(level);
+  if (!Number.isFinite(n)) return "Risk unknown";
+  if (n >= 9) return "Critical risk";
+  if (n === 8) return "Very high risk";
+  if (n === 7) return "High risk";
+  if (n === 6) return "Elevated risk";
+  if (n === 5) return "Moderate risk";
+  if (n === 4) return "Guarded risk";
   return "Low risk";
 };
+
+const formatAqi = (aqi) => (aqi == null ? "N/A" : String(aqi));
+
+const initialAnalysisState = () =>
+  Object.fromEntries(
+    mockCrews.map((c) => [c.unit_id, { status: "pending" }])
+  );
 
 export default function App() {
   const [selectedCrewId, setSelectedCrewId] = useState(null);
   const [focusedCrewId, setFocusedCrewId] = useState(null);
   const [isRiskPanelOpen, setIsRiskPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [analysisByUnitId, setAnalysisByUnitId] = useState(initialAnalysisState);
 
   const cardRefs = useRef({});
 
+  useEffect(() => {
+    let cancelled = false;
+    const API_BASE = getApiBaseUrl();
+
+    mockCrews.forEach((crew) => {
+      analyzeCrew(API_BASE, {
+        unit_id: crew.unit_id,
+        lat: crew.lat,
+        lon: crew.lon,
+      })
+        .then((data) => {
+          if (cancelled) return;
+          setAnalysisByUnitId((prev) => ({
+            ...prev,
+            [crew.unit_id]: { status: "ok", data },
+          }));
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setAnalysisByUnitId((prev) => ({
+            ...prev,
+            [crew.unit_id]: {
+              status: "error",
+              message: err.message || "Analyze request failed",
+            },
+          }));
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const mergedCrews = useMemo(() => {
+    return mockCrews.map((mock) =>
+      applyAnalysisToMock(mock, analysisByUnitId[mock.unit_id])
+    );
+  }, [analysisByUnitId]);
+
   const selectedCrew =
-    mockCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
+    mergedCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
+
+  const analysisPendingCount = useMemo(
+    () =>
+      mergedCrews.filter((c) => c.riskSource === "pending").length,
+    [mergedCrews]
+  );
 
   const sortedCrews = useMemo(() => {
-    return [...mockCrews].sort(
-      (a, b) =>
-        b.risk_score - a.risk_score ||
-        b.last_seen_minutes - a.last_seen_minutes
-    );
-  }, []);
+    return [...mergedCrews].sort((a, b) => {
+      const sa = Number(a.risk_score);
+      const sb = Number(b.risk_score);
+      const da = Number.isFinite(sa) ? sa : -1;
+      const db = Number.isFinite(sb) ? sb : -1;
+      return db - da || b.last_seen_minutes - a.last_seen_minutes;
+    });
+  }, [mergedCrews]);
 
   const filteredCrews = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -174,7 +236,7 @@ export default function App() {
 
           <div style={{ flex: 1, minHeight: 0 }}>
             <FireMap
-              crews={mockCrews}
+              crews={mergedCrews}
               hazardZone={hazardZone}
               escapeRoutes={escapeRoutes}
               cameraLocations={cameraLocations}
@@ -238,6 +300,20 @@ export default function App() {
                 boxSizing: "border-box",
               }}
             />
+
+            {analysisPendingCount > 0 && (
+              <p
+                style={{
+                  margin: "8px 0 0 0",
+                  fontSize: "12px",
+                  color: "#205493",
+                  fontWeight: "600",
+                }}
+              >
+                Live risk analysis in progress ({analysisPendingCount} crew
+                {analysisPendingCount === 1 ? "" : "s"})… typically 2–6s each.
+              </p>
+            )}
           </div>
 
           {filteredCrews.map((crew) => (
@@ -300,7 +376,11 @@ export default function App() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {getSeverityShortLabel(crew.risk_score)}
+                    {crew.riskSource === "pending"
+                      ? "Analyzing…"
+                      : crew.riskSource === "error"
+                        ? getSeverityShortLabel(crew.risk_score)
+                        : crew.risk_level ?? getSeverityShortLabel(crew.risk_score)}
                   </span>
 
                   <span
@@ -308,7 +388,10 @@ export default function App() {
                       width: "30px",
                       height: "30px",
                       borderRadius: "999px",
-                      background: getSeverityColor(crew.risk_score),
+                      background:
+                        crew.riskSource === "pending"
+                          ? "#94a3b8"
+                          : getSeverityColor(crew.risk_score),
                       color: "#ffffff",
                       display: "inline-flex",
                       alignItems: "center",
@@ -318,32 +401,136 @@ export default function App() {
                       flexShrink: 0,
                     }}
                   >
-                    {crew.risk_score}
+                    {crew.riskSource === "pending"
+                      ? "…"
+                      : Number.isFinite(Number(crew.risk_score))
+                        ? crew.risk_score
+                        : "?"}
                   </span>
                 </div>
               </div>
 
-              <p>
+              {crew.riskSource === "error" && (
+                <>
+                  <p
+                    style={{
+                      margin: "0 0 8px 0",
+                      padding: "8px",
+                      background: "#fff3cd",
+                      border: "1px solid #856404",
+                      borderRadius: "4px",
+                      fontSize: "13px",
+                      color: "#533f03",
+                    }}
+                  >
+                    Live analysis unavailable ({crew.riskErrorMessage}). Showing
+                    device telemetry only.
+                  </p>
+                  <p style={{ margin: "8px 0" }}>
+                    <strong>Telemetry note:</strong> {crew.primary_reason}
+                  </p>
+                </>
+              )}
+
+              <p style={{ margin: "8px 0" }}>
                 <strong>Last seen:</strong> {crew.last_seen_minutes} min ago
               </p>
 
-              <p>
+              <p style={{ margin: "8px 0" }}>
                 <strong>Battery:</strong> {crew.battery}%
               </p>
 
-              <p>
+              <p style={{ margin: "8px 0" }}>
                 <strong>Latitude:</strong> {crew.lat}
               </p>
 
-              <p>
+              <p style={{ margin: "8px 0" }}>
                 <strong>Longitude:</strong> {crew.lon}
               </p>
 
-              <p>
-                <strong>Primary reason:</strong> {crew.primary_reason}
-              </p>
+              {crew.riskSource === "api" && (
+                <>
+                  <p style={{ margin: "8px 0", fontSize: "13px", color: "#3d4551" }}>
+                    <strong>AI confidence:</strong> {crew.confidence ?? "—"}
+                    {crew.analyzed_at && (
+                      <>
+                        {" "}
+                        · <strong>Analyzed:</strong>{" "}
+                        {new Date(crew.analyzed_at).toLocaleString()}
+                      </>
+                    )}
+                  </p>
 
-              <p>
+                  <p style={{ margin: "8px 0" }}>
+                    <strong>Primary reason:</strong> {crew.primary_reason}
+                  </p>
+
+                  {crew.explanation && (
+                    <p style={{ margin: "8px 0", lineHeight: 1.35 }}>
+                      <strong>AI summary:</strong> {crew.explanation}
+                    </p>
+                  )}
+
+                  {crew.risk_reasons?.length > 0 && (
+                    <div style={{ margin: "8px 0" }}>
+                      <strong>Risk factors:</strong>
+                      <ul
+                        style={{
+                          margin: "6px 0 0 0",
+                          paddingLeft: "18px",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {crew.risk_reasons.map((reason, idx) => (
+                          <li key={`${crew.unit_id}-rr-${idx}`}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {crew.weather && (
+                    <p style={{ margin: "8px 0", lineHeight: 1.35 }}>
+                      <strong>Weather:</strong>{" "}
+                      {crew.weather.temperature_f != null
+                        ? `${crew.weather.temperature_f}°F`
+                        : "—"}
+                      , wind {crew.weather.wind_speed ?? "—"} mph{" "}
+                      {crew.weather.wind_direction
+                        ? `(${crew.weather.wind_direction})`
+                        : ""}
+                      , humidity {crew.weather.humidity ?? "—"}%, AQI{" "}
+                      {formatAqi(crew.weather.aqi)}
+                      {crew.weather.confidence && (
+                        <> · fusion {crew.weather.confidence}</>
+                      )}
+                    </p>
+                  )}
+
+                  {crew.camera && (
+                    <p style={{ margin: "8px 0", lineHeight: 1.35 }}>
+                      <strong>Camera:</strong>{" "}
+                      {crew.camera.camera_caption ?? "—"}
+                      {crew.camera.camera_risk_level && (
+                        <> · risk {crew.camera.camera_risk_level}</>
+                      )}
+                    </p>
+                  )}
+                </>
+              )}
+
+              {crew.riskSource === "pending" && (
+                <p
+                  style={{
+                    margin: "8px 0",
+                    fontStyle: "italic",
+                    color: "#5c5c5c",
+                  }}
+                >
+                  Requesting full analysis from backend (weather, cameras, AI)…
+                </p>
+              )}
+
+              <p style={{ margin: "8px 0" }}>
                 <strong>Comms summary:</strong> {crew.transcript}
               </p>
 
@@ -590,12 +777,34 @@ export default function App() {
               </p>
 
               <p style={{ margin: 0 }}>
-                <strong>Risk:</strong> {selectedCrew.risk_score}/10 —{" "}
-                {getSeverityShortLabel(selectedCrew.risk_score)}
+                <strong>Risk:</strong>{" "}
+                {selectedCrew.riskSource === "pending"
+                  ? "…"
+                  : `${Number.isFinite(Number(selectedCrew.risk_score)) ? selectedCrew.risk_score : "?"}/10 — ${selectedCrew.risk_level ?? getSeverityShortLabel(selectedCrew.risk_score)}`}
               </p>
 
+              {selectedCrew.riskSource === "api" && selectedCrew.confidence && (
+                <p style={{ margin: 0, fontSize: "13px", color: "#3d4551" }}>
+                  <strong>Analysis confidence:</strong> {selectedCrew.confidence}
+                  {selectedCrew.analyzed_at && (
+                    <>
+                      {" "}
+                      · {new Date(selectedCrew.analyzed_at).toLocaleString()}
+                    </>
+                  )}
+                </p>
+              )}
+
+              {selectedCrew.riskSource === "error" && (
+                <p style={{ margin: 0, color: "#981b1e" }}>
+                  <strong>Analysis:</strong> unavailable —{" "}
+                  {selectedCrew.riskErrorMessage}
+                </p>
+              )}
+
               <p style={{ margin: 0 }}>
-                <strong>Last seen:</strong> {selectedCrew.last_seen_minutes} min ago
+                <strong>Last seen:</strong> {selectedCrew.last_seen_minutes}{" "}
+                min ago
               </p>
 
               <p style={{ margin: 0 }}>
@@ -610,27 +819,152 @@ export default function App() {
                 <strong>Longitude:</strong> {selectedCrew.lon}
               </p>
 
-              <p style={{ margin: 0 }}>
-                <strong>Primary reason:</strong> {selectedCrew.primary_reason}
-              </p>
+              {selectedCrew.riskSource === "api" && (
+                <>
+                  <p style={{ margin: 0 }}>
+                    <strong>Primary reason:</strong> {selectedCrew.primary_reason}
+                  </p>
+
+                  {selectedCrew.explanation && (
+                    <p style={{ margin: 0, lineHeight: 1.4 }}>
+                      <strong>AI explanation:</strong> {selectedCrew.explanation}
+                    </p>
+                  )}
+
+                  {selectedCrew.risk_reasons?.length > 0 && (
+                    <div style={{ margin: 0 }}>
+                      <strong>Risk factors:</strong>
+                      <ul
+                        style={{
+                          margin: "6px 0 0 0",
+                          paddingLeft: "18px",
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {selectedCrew.risk_reasons.map((reason, idx) => (
+                          <li key={`detail-rr-${idx}`}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {selectedCrew.weather && (
+                    <div
+                      style={{
+                        margin: 0,
+                        padding: "10px",
+                        background: "#ffffff",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      <strong>Weather</strong>
+                      <p style={{ margin: "6px 0 0 0", lineHeight: 1.4 }}>
+                        {selectedCrew.weather.temperature_f != null
+                          ? `${selectedCrew.weather.temperature_f}°F`
+                          : "—"}
+                        , wind {selectedCrew.weather.wind_speed ?? "—"} mph{" "}
+                        {selectedCrew.weather.wind_direction
+                          ? `from ${selectedCrew.weather.wind_direction}`
+                          : ""}
+                        , humidity {selectedCrew.weather.humidity ?? "—"}%, AQI{" "}
+                        {formatAqi(selectedCrew.weather.aqi)}
+                        {selectedCrew.weather.confidence && (
+                          <> · {selectedCrew.weather.confidence} confidence</>
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedCrew.camera && (
+                    <div
+                      style={{
+                        margin: 0,
+                        padding: "10px",
+                        background: "#ffffff",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      <strong>Camera</strong>
+                      <p style={{ margin: "6px 0 0 0", lineHeight: 1.4 }}>
+                        {selectedCrew.camera.camera_caption ?? "—"}
+                      </p>
+                      <p style={{ margin: "6px 0 0 0", fontSize: "13px" }}>
+                        Available:{" "}
+                        {selectedCrew.camera.camera_available ? "yes" : "no"} ·
+                        Visibility: {selectedCrew.camera.visibility_status ?? "—"}{" "}
+                        · Hazard:{" "}
+                        {selectedCrew.camera.hazard_detected ? "yes" : "no"}
+                      </p>
+                      {selectedCrew.camera.image_url && (
+                        <a
+                          href={selectedCrew.camera.image_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ fontSize: "13px", fontWeight: "700" }}
+                        >
+                          Open camera image
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
 
               <p style={{ margin: 0 }}>
                 <strong>Comms summary:</strong> {selectedCrew.transcript}
               </p>
 
-              <p
-                style={{
-                  marginTop: "8px",
-                  padding: "10px",
-                  background: "#eef6ff",
-                  borderLeft: "4px solid #205493",
-                  color: "#112e51",
-                  fontWeight: "600",
-                }}
-              >
-                Suggested command review: verify crew status, confirm visibility,
-                and review nearest escape route options before issuing direction.
-              </p>
+              {selectedCrew.riskSource === "api" &&
+                selectedCrew.recommended_command_review && (
+                  <p
+                    style={{
+                      marginTop: "8px",
+                      padding: "10px",
+                      background: "#eef6ff",
+                      borderLeft: "4px solid #205493",
+                      color: "#112e51",
+                      fontWeight: "600",
+                    }}
+                  >
+                    <strong>Recommended command review:</strong>{" "}
+                    {selectedCrew.recommended_command_review}
+                  </p>
+                )}
+
+              {selectedCrew.riskSource === "api" &&
+                selectedCrew.recommended_questions?.length > 0 && (
+                  <div style={{ margin: 0 }}>
+                    <strong>Suggested questions:</strong>
+                    <ul
+                      style={{
+                        margin: "6px 0 0 0",
+                        paddingLeft: "18px",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {selectedCrew.recommended_questions.map((q, idx) => (
+                        <li key={`detail-q-${idx}`}>{q}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              {selectedCrew.riskSource !== "api" && (
+                <p
+                  style={{
+                    marginTop: "8px",
+                    padding: "10px",
+                    background: "#eef6ff",
+                    borderLeft: "4px solid #205493",
+                    color: "#112e51",
+                    fontWeight: "600",
+                  }}
+                >
+                  Full AI briefing appears after backend analysis completes.
+                </p>
+              )}
             </div>
           )}
         </div>
