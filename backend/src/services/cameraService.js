@@ -1,35 +1,68 @@
 const mockCamera = require("../data/mockCamera.json");
+const { geoBucketKey } = require("./geoBucket");
+const { sanitizeForLogs } = require("../lib/sanitizeForLogs");
 
 const CLASSIFICATION_URL =
   process.env.CLASSIFICATION_URL || "http://localhost:5000/api/classification";
 
+const cameraCache = new Map();
+const CAMERA_CACHE_TTL_MS =
+  Number(process.env.CAMERA_CACHE_TTL_MS) || 15 * 60 * 1000;
+
+function attachCameraCoords(camera, lat, lon) {
+  const raw = camera.raw
+    ? {
+        ...camera.raw,
+        requestedCoordinate: { x: lat, y: lon },
+      }
+    : camera.raw;
+  return {
+    ...camera,
+    lat,
+    lon,
+    raw,
+  };
+}
+
+async function getCameraRiskForCoordinatesUncached(lat, lon) {
+  const response = await fetch(CLASSIFICATION_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      x: lat,
+      y: lon,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Classification route failed with status ${response.status}`);
+  }
+
+  const rawCamera = await response.json();
+  return normalizeCamera(rawCamera, lat, lon);
+}
+
 async function getCameraRiskForCoordinates(lat, lon) {
+  const key = geoBucketKey(lat, lon);
+  const now = Date.now();
+  const hit = cameraCache.get(key);
+  if (hit && now - hit.at < CAMERA_CACHE_TTL_MS) {
+    return attachCameraCoords(hit.payload, lat, lon);
+  }
+
   try {
-    const response = await fetch(CLASSIFICATION_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        x: lat,
-        y: lon
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Classification route failed with status ${response.status}`);
-    }
-
-    const rawCamera = await response.json();
-
-    return normalizeCamera(rawCamera, lat, lon);
+    const payload = await getCameraRiskForCoordinatesUncached(lat, lon);
+    cameraCache.set(key, { at: now, payload });
+    return attachCameraCoords(payload, lat, lon);
   } catch (error) {
-    console.error("Camera integration failed:", error.message);
+    console.error("Camera integration failed:", sanitizeForLogs(error.message));
 
     return normalizeCamera(
       {
         ...mockCamera,
-        source: "mock_camera_fallback"
+        source: "mock_camera_fallback",
       },
       lat,
       lon

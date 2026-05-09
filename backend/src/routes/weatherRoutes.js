@@ -1,5 +1,6 @@
 const express = require('express')
 const { buildFusedWeather } = require('../weatherFusion')
+const { sanitizeForLogs } = require('../lib/sanitizeForLogs')
 
 const provider = (process.env.WEATHER_REALTIME_PROVIDER || 'tomorrow').toLowerCase()
 console.log(`[weather] Realtime provider: ${provider}`)
@@ -34,7 +35,7 @@ weatherRouter.get('/test', async (_req, res) => {
     return res.status(502).json({
       _test: true,
       error: 'Weather fusion failed',
-      message: error.message,
+      message: sanitizeForLogs(error.message),
     })
   }
 })
@@ -56,7 +57,7 @@ weatherRouter.post('/fused', async (req, res) => {
   } catch (error) {
     return res.status(502).json({
       error: 'Weather fusion failed',
-      message: error.message,
+      message: sanitizeForLogs(error.message),
     })
   }
 })

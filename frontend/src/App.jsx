@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import FireMap from "./components/FireMap";
-import { analyzeCrew, getApiBaseUrl } from "./api/crewTraceApi";
+import { getApiBaseUrl } from "./api/crewTraceApi";
+import { analyzeCrewBatchDeduped } from "./lib/analyzeBatchSingleton";
 import { applyAnalysisToMock } from "./lib/mergeCrewAnalysis";
 import { mockCrews } from "./data/mockCrews";
 import {
@@ -10,6 +11,7 @@ import {
   cameraLocations,
   windArrows,
 } from "./data/mockMapData";
+import mockCameraFire from "./assets/mockfire.png";
 
 const severityLevels = [
   { level: 1, description: "Minimal risk. Routine monitoring only." },
@@ -26,11 +28,11 @@ const severityLevels = [
 
 const getSeverityColor = (level) => {
   const n = Number(level);
-  if (!Number.isFinite(n)) return "#94a3b8";
-  if (n >= 8) return "#dc2626";
-  if (n >= 6) return "#f97316";
-  if (n === 5) return "#eab308";
-  return "#16a34a";
+  if (!Number.isFinite(n)) return "#71767a";
+  if (n >= 8) return "#b50909";
+  if (n >= 6) return "#c05600";
+  if (n === 5) return "#a26700";
+  return "#2e7044";
 };
 
 const getSeverityShortLabel = (level) => {
@@ -49,7 +51,7 @@ const formatAqi = (aqi) => (aqi == null ? "N/A" : String(aqi));
 
 const initialAnalysisState = () =>
   Object.fromEntries(
-    mockCrews.map((c) => [c.unit_id, { status: "pending" }])
+    mockCrews.map((crew) => [crew.unit_id, { status: "pending" }])
   );
 
 export default function App() {
@@ -65,30 +67,34 @@ export default function App() {
     let cancelled = false;
     const API_BASE = getApiBaseUrl();
 
-    mockCrews.forEach((crew) => {
-      analyzeCrew(API_BASE, {
-        unit_id: crew.unit_id,
-        lat: crew.lat,
-        lon: crew.lon,
-      })
-        .then((data) => {
-          if (cancelled) return;
-          setAnalysisByUnitId((prev) => ({
-            ...prev,
-            [crew.unit_id]: { status: "ok", data },
-          }));
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          setAnalysisByUnitId((prev) => ({
-            ...prev,
-            [crew.unit_id]: {
-              status: "error",
-              message: err.message || "Analyze request failed",
-            },
-          }));
+    analyzeCrewBatchDeduped(API_BASE, mockCrews)
+      .then((results) => {
+        if (cancelled) return;
+
+        setAnalysisByUnitId((prev) => {
+          const next = { ...prev };
+          for (const row of results) {
+            if (row?.unit_id) {
+              next[row.unit_id] = { status: "ok", data: row };
+            }
+          }
+          return next;
         });
-    });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+
+        setAnalysisByUnitId((prev) => {
+          const next = { ...prev };
+          for (const crew of mockCrews) {
+            next[crew.unit_id] = {
+              status: "error",
+              message: err.message || "Analyze batch failed",
+            };
+          }
+          return next;
+        });
+      });
 
     return () => {
       cancelled = true;
@@ -96,32 +102,46 @@ export default function App() {
   }, []);
 
   const mergedCrews = useMemo(() => {
-    return mockCrews.map((mock) =>
-      applyAnalysisToMock(mock, analysisByUnitId[mock.unit_id])
-    );
+    return mockCrews.map((mock) => {
+      const crew = applyAnalysisToMock(mock, analysisByUnitId[mock.unit_id]);
+
+      if (crew.unit_id === "Alpha-3") {
+        return {
+          ...crew,
+          risk_score: Math.max(Number(crew.risk_score) || 0, 9),
+          risk_level: "Critical risk",
+          primary_reason:
+            "Mock camera feed shows visible flame activity near Alpha-3 position.",
+          explanation:
+            "Alpha-3 is near the camera sector where the mock fire image indicates visible flames and smoke. Combined with stale check-in timing, this crew should be prioritized for command review.",
+          risk_reasons: [
+            ...(crew.risk_reasons ?? []),
+            "Mock camera image shows visible flames near Alpha-3.",
+            "Smoke and flame activity may affect visibility and escape route safety.",
+          ],
+          camera: {
+            ...(crew.camera ?? {}),
+            camera_available: true,
+            camera_caption:
+              "Mock camera view detects visible flames and smoke near Alpha-3.",
+            camera_risk_level: "high",
+            visibility_status: "reduced",
+            hazard_detected: true,
+            image_url: mockCameraFire,
+            is_mock: true,
+          },
+        };
+      }
+
+      return crew;
+    });
   }, [analysisByUnitId]);
 
   const selectedCrew =
     mergedCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
 
   const analysisPendingCount = useMemo(
-    () => mergedCrews.filter((c) => c.riskSource === "pending").length,
-    [mergedCrews]
-  );
-
-  const highRiskCount = useMemo(
-    () =>
-      mergedCrews.filter(
-        (crew) =>
-          crew.riskSource !== "pending" &&
-          Number.isFinite(Number(crew.risk_score)) &&
-          Number(crew.risk_score) >= 7
-      ).length,
-    [mergedCrews]
-  );
-
-  const staleCrewCount = useMemo(
-    () => mergedCrews.filter((crew) => crew.last_seen_minutes > 5).length,
+    () => mergedCrews.filter((crew) => crew.riskSource === "pending").length,
     [mergedCrews]
   );
 
@@ -172,38 +192,37 @@ export default function App() {
   };
 
   const cardText = {
-    color: "#334155",
+    color: "#1b1b1b",
     margin: "8px 0",
-    lineHeight: 1.35,
+    lineHeight: 1.4,
     fontSize: "14px",
   };
 
   const cardStrong = {
-    color: "#0f172a",
-    fontWeight: 850,
+    color: "#111827",
+    fontWeight: 800,
   };
 
   const panelText = {
-    color: "#334155",
+    color: "#1b1b1b",
     margin: 0,
-    lineHeight: 1.4,
+    lineHeight: 1.45,
   };
 
-  const glassCard = {
-    background: "rgba(255, 255, 255, 0.92)",
-    border: "1px solid rgba(148, 163, 184, 0.35)",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.12)",
-    backdropFilter: "blur(12px)",
+  const officialCard = {
+    background: "#ffffff",
+    border: "1px solid #c9c9c9",
+    boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
   };
 
   return (
     <main
       style={{
         height: "100vh",
-        background:
-          "linear-gradient(135deg, #f8fafc 0%, #e0f2fe 45%, #fefce8 100%)",
-        color: "#0f172a",
-        fontFamily: '"Inter", "Source Sans Pro", "Segoe UI", Arial, sans-serif',
+        background: "#f5f5f5",
+        color: "#1b1b1b",
+        fontFamily:
+          '"Source Sans 3", "Source Sans Pro", "Segoe UI", Arial, sans-serif',
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -211,81 +230,58 @@ export default function App() {
     >
       <header
         style={{
-          background:
-            "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(224,242,254,0.95))",
-          color: "#0f172a",
-          borderBottom: "1px solid rgba(14, 165, 233, 0.25)",
-          padding: "16px 28px",
+          background: "#112f4e",
+          color: "#ffffff",
+          borderBottom: "6px solid #005ea8",
+          padding: "14px 28px 16px 28px",
           flexShrink: 0,
-          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.16)",
         }}
       >
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto",
-            gap: "20px",
-            alignItems: "center",
             width: "100%",
+            textAlign: "center",
           }}
         >
-          <div>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "12px",
-                letterSpacing: "1.8px",
-                textTransform: "uppercase",
-                fontWeight: "900",
-                color: "#0284c7",
-              }}
-            >
-              CrewTrace Incident Operations Dashboard
-            </p>
-
-            <h1
-              style={{
-                fontSize: "46px",
-                lineHeight: 1,
-                fontWeight: "950",
-                margin: "6px 0 8px 0",
-                color: "#0f172a",
-                textShadow: "0 6px 18px rgba(15,23,42,0.08)",
-              }}
-            >
-              Crew Trace
-            </h1>
-
-            <p
-              style={{
-                fontSize: "17px",
-                lineHeight: 1.35,
-                color: "#475569",
-                margin: 0,
-              }}
-            >
-              AI-assisted wildfire situational awareness with live crew
-              locations, risk scores, weather context, and escape route
-              guidance.
-            </p>
-          </div>
-
-          <div
+          <p
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 110px)",
-              gap: "12px",
+              margin: 0,
+              fontSize: "12px",
+              letterSpacing: "1.2px",
+              textTransform: "uppercase",
+              fontWeight: "700",
+              color: "#d9e8f6",
             }}
           >
-            <MetricCard label="Crews" value={mergedCrews.length} color="#0369a1" />
-            <MetricCard label="High Risk" value={highRiskCount} color="#ea580c" />
-            <MetricCard label="Stale" value={staleCrewCount} color="#dc2626" />
-            <MetricCard
-              label="Analyzing"
-              value={analysisPendingCount}
-              color="#0284c7"
-            />
-          </div>
+            CrewTrace Incident Operations Dashboard
+          </p>
+
+          <h1
+            style={{
+              fontSize: "44px",
+              lineHeight: 1,
+              fontWeight: "800",
+              margin: "6px 0 10px 0",
+              color: "#ffffff",
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Crew Trace
+          </h1>
+
+          <p
+            style={{
+              fontSize: "18px",
+              lineHeight: 1.4,
+              color: "#d9e8f6",
+              margin: 0,
+              fontWeight: "400",
+            }}
+          >
+            AI-assisted wildfire situational awareness with live crew locations,
+            risk scores, weather context, and escape route guidance.
+          </p>
         </div>
       </header>
 
@@ -308,9 +304,9 @@ export default function App() {
             minWidth: 0,
             display: "flex",
             flexDirection: "column",
-            borderRadius: "24px",
+            borderRadius: "4px",
             padding: "14px",
-            ...glassCard,
+            ...officialCard,
           }}
         >
           <div
@@ -325,10 +321,10 @@ export default function App() {
             <div>
               <h2
                 style={{
-                  fontSize: "25px",
-                  fontWeight: "950",
+                  fontSize: "24px",
+                  fontWeight: "900",
                   margin: 0,
-                  color: "#0f172a",
+                  color: "#112f4e",
                   letterSpacing: "0.2px",
                 }}
               >
@@ -338,12 +334,13 @@ export default function App() {
               <p
                 style={{
                   margin: "4px 0 0",
-                  color: "#64748b",
+                  color: "#565c65",
                   fontSize: "13px",
                   fontWeight: 700,
                 }}
               >
-                SDSU / Mission Valley sector — weather, camera, and crew telemetry
+                SDSU / Mission Valley sector — weather, camera, and crew
+                telemetry
               </p>
             </div>
 
@@ -352,11 +349,11 @@ export default function App() {
               onClick={() => setIsRiskPanelOpen(true)}
               style={{
                 fontSize: "13px",
-                fontWeight: "900",
-                color: "#0369a1",
-                background: "#e0f2fe",
-                border: "1px solid rgba(2, 132, 199, 0.35)",
-                borderRadius: "999px",
+                fontWeight: "700",
+                color: "#ffffff",
+                background: "#005ea8",
+                border: "1px solid #005ea8",
+                borderRadius: "4px",
                 padding: "9px 13px",
                 cursor: "pointer",
               }}
@@ -410,10 +407,10 @@ export default function App() {
               position: "sticky",
               top: 0,
               zIndex: 5,
-              borderRadius: "18px",
+              borderRadius: "4px",
               padding: "14px",
               flexShrink: 0,
-              ...glassCard,
+              ...officialCard,
             }}
           >
             <label
@@ -421,8 +418,8 @@ export default function App() {
               style={{
                 display: "block",
                 fontSize: "12px",
-                fontWeight: "900",
-                color: "#0284c7",
+                fontWeight: "800",
+                color: "#112f4e",
                 marginBottom: "8px",
                 letterSpacing: "1px",
               }}
@@ -438,11 +435,11 @@ export default function App() {
               placeholder="Type crew name, e.g. Alpha-3"
               style={{
                 width: "100%",
-                border: "1px solid rgba(148, 163, 184, 0.65)",
-                borderRadius: "12px",
-                padding: "11px 12px",
-                fontWeight: "800",
-                color: "#0f172a",
+                border: "1px solid #71767a",
+                borderRadius: "4px",
+                padding: "10px 12px",
+                fontWeight: "700",
+                color: "#1b1b1b",
                 background: "#ffffff",
                 boxSizing: "border-box",
                 outline: "none",
@@ -454,14 +451,14 @@ export default function App() {
                 style={{
                   margin: "10px 0 0 0",
                   fontSize: "12px",
-                  color: "#0369a1",
+                  color: "#005ea8",
                   fontWeight: "700",
                   lineHeight: 1.35,
                 }}
               >
                 {`Live risk analysis in progress (${analysisPendingCount} ${
                   analysisPendingCount === 1 ? "crew" : "crews"
-                })…`}
+                })...`}
                 <br />
                 Weather, camera, and AI fusion typically completes in 2–6s.
               </p>
@@ -479,25 +476,21 @@ export default function App() {
                 setFocusedCrewId(crew.unit_id);
               }}
               style={{
-                background:
-                  focusedCrewId === crew.unit_id
-                    ? "linear-gradient(135deg, #ffffff, #e0f2fe)"
-                    : "rgba(255,255,255,0.94)",
+                background: focusedCrewId === crew.unit_id ? "#eef7ff" : "#ffffff",
                 border:
                   focusedCrewId === crew.unit_id
-                    ? "1px solid rgba(2, 132, 199, 0.65)"
-                    : "1px solid rgba(148, 163, 184, 0.35)",
-                borderRadius: "20px",
+                    ? "2px solid #005ea8"
+                    : "1px solid #c9c9c9",
+                borderRadius: "4px",
                 padding: "16px",
                 boxShadow:
                   focusedCrewId === crew.unit_id
-                    ? "0 0 0 1px rgba(2, 132, 199, 0.2), 0 16px 35px rgba(2, 132, 199, 0.16)"
-                    : "0 12px 30px rgba(15,23,42,0.10)",
+                    ? "0 0 0 3px rgba(0, 94, 168, 0.14)"
+                    : "0 2px 8px rgba(0, 0, 0, 0.06)",
                 textAlign: "left",
                 cursor: "pointer",
-                color: "#0f172a",
-                transition:
-                  "transform 160ms ease, border 160ms ease, box-shadow 160ms ease",
+                color: "#1b1b1b",
+                transition: "border 160ms ease, box-shadow 160ms ease",
               }}
             >
               <div
@@ -512,9 +505,10 @@ export default function App() {
                   <h2
                     style={{
                       fontSize: "23px",
-                      fontWeight: "950",
+                      fontWeight: "800",
                       margin: 0,
-                      color: "#0f172a",
+                      color: "#112f4e",
+                      letterSpacing: "-0.02em",
                     }}
                   >
                     {crew.unit_id}
@@ -523,7 +517,7 @@ export default function App() {
                   <p
                     style={{
                       margin: "4px 0 0",
-                      color: "#64748b",
+                      color: "#565c65",
                       fontSize: "13px",
                       fontWeight: 800,
                     }}
@@ -539,21 +533,18 @@ export default function App() {
                 {crew.riskSource !== "pending" ? (
                   <span
                     style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "999px",
+                      minWidth: "42px",
+                      height: "34px",
+                      borderRadius: "4px",
                       background: getSeverityColor(crew.risk_score),
                       color: "#ffffff",
                       display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "17px",
-                      fontWeight: "950",
+                      fontSize: "16px",
+                      fontWeight: "800",
                       flexShrink: 0,
-                      boxShadow: `0 0 18px ${getSeverityColor(
-                        crew.risk_score
-                      )}66`,
-                      border: "2px solid rgba(255,255,255,0.9)",
+                      border: "1px solid rgba(0,0,0,0.2)",
                     }}
                   >
                     {Number.isFinite(Number(crew.risk_score))
@@ -563,8 +554,8 @@ export default function App() {
                 ) : (
                   <span
                     style={{
-                      color: "#0284c7",
-                      fontWeight: "900",
+                      color: "#005ea8",
+                      fontWeight: "800",
                       fontSize: "13px",
                     }}
                   >
@@ -578,11 +569,11 @@ export default function App() {
                   style={{
                     marginTop: "12px",
                     padding: "10px",
-                    background: "#fef3c7",
-                    border: "1px solid #f59e0b",
-                    borderRadius: "12px",
+                    background: "#fff4ce",
+                    border: "1px solid #ffbe2e",
+                    borderRadius: "4px",
                     fontSize: "13px",
-                    color: "#78350f",
+                    color: "#7d4600",
                     lineHeight: 1.35,
                     fontWeight: "700",
                   }}
@@ -623,7 +614,7 @@ export default function App() {
                     <p
                       style={{
                         ...cardText,
-                        color: "#64748b",
+                        color: "#565c65",
                         fontSize: "13px",
                       }}
                     >
@@ -657,8 +648,8 @@ export default function App() {
                           style={{
                             margin: "6px 0 0 0",
                             paddingLeft: "18px",
-                            lineHeight: 1.35,
-                            color: "#334155",
+                            lineHeight: 1.4,
+                            color: "#1b1b1b",
                             fontSize: "14px",
                           }}
                         >
@@ -686,78 +677,11 @@ export default function App() {
                         )}
                       </p>
                     )}
-
-                    {crew.camera && (
-                      <div
-                        style={{
-                          marginTop: "10px",
-                          padding: "12px",
-                          borderRadius: "14px",
-                          background: "#f8fafc",
-                          border: "1px solid rgba(148, 163, 184, 0.35)",
-                        }}
-                      >
-                        <p style={{ ...cardText, margin: 0 }}>
-                          <strong style={cardStrong}>Camera:</strong>{" "}
-                          {crew.camera.camera_caption ?? "—"}
-                          {crew.camera.camera_risk_level && (
-                            <> · risk {crew.camera.camera_risk_level}</>
-                          )}
-                        </p>
-
-                        <p
-                          style={{
-                            margin: "8px 0 0",
-                            color: "#64748b",
-                            fontSize: "13px",
-                            lineHeight: 1.35,
-                            fontWeight: 700,
-                          }}
-                        >
-                          Available:{" "}
-                          {crew.camera.camera_available ? "yes" : "no"} ·
-                          Visibility: {crew.camera.visibility_status ?? "—"} ·
-                          Hazard: {crew.camera.hazard_detected ? "yes" : "no"}
-                        </p>
-
-                        {crew.camera.image_url ? (
-                          <a
-                            href={crew.camera.image_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(event) => event.stopPropagation()}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              marginTop: "10px",
-                              padding: "9px 12px",
-                              borderRadius: "999px",
-                              background: "#e0f2fe",
-                              border: "1px solid rgba(2, 132, 199, 0.35)",
-                              color: "#0369a1",
-                              fontWeight: 900,
-                              fontSize: "13px",
-                              textDecoration: "none",
-                            }}
-                          >
-                            Open camera image
-                          </a>
-                        ) : (
-                          <p
-                            style={{
-                              margin: "8px 0 0",
-                              color: "#64748b",
-                              fontSize: "13px",
-                              fontStyle: "italic",
-                            }}
-                          >
-                            No camera image available for this crew.
-                          </p>
-                        )}
-                      </div>
-                    )}
                   </>
+                )}
+
+                {crew.camera && (
+                  <CameraCard crew={crew} mockCameraFire={mockCameraFire} />
                 )}
 
                 {crew.riskSource === "pending" && (
@@ -765,11 +689,11 @@ export default function App() {
                     style={{
                       margin: "8px 0",
                       fontStyle: "italic",
-                      color: "#0284c7",
+                      color: "#005ea8",
                       fontWeight: "700",
                     }}
                   >
-                    Requesting backend analysis: weather, cameras, and AI…
+                    Requesting backend analysis: weather, cameras, and AI...
                   </p>
                 )}
               </div>
@@ -777,13 +701,13 @@ export default function App() {
               {crew.last_seen_minutes > 5 && (
                 <p
                   style={{
-                    background: "#fee2e2",
-                    color: "#991b1b",
+                    background: "#f8dfe2",
+                    color: "#8b0a03",
                     padding: "10px",
-                    borderRadius: "12px",
-                    fontWeight: "900",
+                    borderRadius: "4px",
+                    fontWeight: "800",
                     textAlign: "center",
-                    border: "1px solid #f87171",
+                    border: "1px solid #d54309",
                     margin: "12px 0 0",
                   }}
                 >
@@ -804,18 +728,17 @@ export default function App() {
           width: "460px",
           maxWidth: "calc(100% - 48px)",
           maxHeight: "80vh",
-          background: "rgba(255,255,255,0.98)",
-          border: "1px solid rgba(2, 132, 199, 0.3)",
-          boxShadow: "0 20px 70px rgba(15,23,42,0.20)",
+          background: "#ffffff",
+          border: "1px solid #c9c9c9",
+          boxShadow: "0 8px 28px rgba(0,0,0,0.2)",
           transform: isRiskPanelOpen ? "translateY(0)" : "translateY(-12px)",
           opacity: isRiskPanelOpen ? 1 : 0,
           pointerEvents: isRiskPanelOpen ? "auto" : "none",
           transition: "opacity 180ms ease, transform 180ms ease",
           zIndex: 900,
-          borderRadius: "20px",
+          borderRadius: "4px",
           overflow: "hidden",
-          color: "#0f172a",
-          backdropFilter: "blur(14px)",
+          color: "#1b1b1b",
         }}
       >
         <div
@@ -824,16 +747,16 @@ export default function App() {
             justifyContent: "space-between",
             alignItems: "center",
             padding: "14px 16px",
-            borderBottom: "1px solid rgba(148, 163, 184, 0.25)",
-            background: "#f0f9ff",
+            borderBottom: "1px solid #c9c9c9",
+            background: "#f7f9fa",
           }}
         >
           <p
             style={{
               margin: 0,
               fontSize: "19px",
-              fontWeight: "950",
-              color: "#0f172a",
+              fontWeight: "900",
+              color: "#112f4e",
             }}
           >
             Risk Descriptions
@@ -843,13 +766,13 @@ export default function App() {
             type="button"
             onClick={() => setIsRiskPanelOpen(false)}
             style={{
-              border: "1px solid rgba(2, 132, 199, 0.35)",
-              background: "#e0f2fe",
-              color: "#0369a1",
-              borderRadius: "999px",
+              border: "1px solid #005ea8",
+              background: "#005ea8",
+              color: "#ffffff",
+              borderRadius: "4px",
               padding: "7px 12px",
               cursor: "pointer",
-              fontWeight: "900",
+              fontWeight: "700",
             }}
           >
             Close
@@ -870,11 +793,11 @@ export default function App() {
               key={`risk-panel-${item.level}`}
               style={{
                 display: "grid",
-                gridTemplateColumns: "38px minmax(0, 1fr)",
+                gridTemplateColumns: "42px minmax(0, 1fr)",
                 alignItems: "center",
                 gap: "10px",
-                border: "1px solid rgba(148, 163, 184, 0.28)",
-                borderRadius: "14px",
+                border: "1px solid #c9c9c9",
+                borderRadius: "4px",
                 background: "#ffffff",
                 padding: "10px",
               }}
@@ -883,12 +806,12 @@ export default function App() {
                 style={{
                   width: "34px",
                   height: "34px",
-                  borderRadius: "999px",
+                  borderRadius: "4px",
                   color: "#ffffff",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontWeight: "950",
+                  fontWeight: "800",
                   background: getSeverityColor(item.level),
                 }}
               >
@@ -898,8 +821,8 @@ export default function App() {
               <p
                 style={{
                   margin: 0,
-                  color: "#334155",
-                  lineHeight: 1.25,
+                  color: "#1b1b1b",
+                  lineHeight: 1.35,
                   fontSize: "14px",
                   fontWeight: 700,
                 }}
@@ -920,16 +843,15 @@ export default function App() {
           width: "540px",
           maxWidth: "100%",
           height: "100vh",
-          background: "rgba(255,255,255,0.98)",
-          borderLeft: "1px solid rgba(2, 132, 199, 0.35)",
-          boxShadow: "-10px 0 40px rgba(15,23,42,0.18)",
+          background: "#ffffff",
+          borderLeft: "4px solid #005ea8",
+          boxShadow: "-10px 0 35px rgba(0,0,0,0.2)",
           transform: selectedCrew ? "translateX(0)" : "translateX(100%)",
           transition: "transform 220ms ease",
           zIndex: 1000,
           display: "flex",
           flexDirection: "column",
-          color: "#0f172a",
-          backdropFilter: "blur(14px)",
+          color: "#1b1b1b",
         }}
       >
         <div
@@ -938,8 +860,8 @@ export default function App() {
             justifyContent: "space-between",
             alignItems: "center",
             padding: "18px",
-            borderBottom: "1px solid rgba(148, 163, 184, 0.25)",
-            background: "linear-gradient(135deg, #ffffff, #e0f2fe)",
+            borderBottom: "1px solid #c9c9c9",
+            background: "#f7f9fa",
           }}
         >
           <div>
@@ -948,9 +870,9 @@ export default function App() {
                 margin: 0,
                 fontSize: "12px",
                 textTransform: "uppercase",
-                color: "#0284c7",
-                fontWeight: "900",
-                letterSpacing: "1.2px",
+                color: "#005ea8",
+                fontWeight: "800",
+                letterSpacing: "1px",
               }}
             >
               Crew Detail
@@ -959,9 +881,9 @@ export default function App() {
             <h3
               style={{
                 margin: "4px 0 0 0",
-                color: "#0f172a",
+                color: "#112f4e",
                 fontSize: "30px",
-                fontWeight: "950",
+                fontWeight: "900",
               }}
             >
               {selectedCrew ? selectedCrew.unit_id : "Crew"}
@@ -972,13 +894,13 @@ export default function App() {
             type="button"
             onClick={() => setSelectedCrewId(null)}
             style={{
-              border: "1px solid rgba(2, 132, 199, 0.35)",
-              background: "#e0f2fe",
-              color: "#0369a1",
-              borderRadius: "999px",
+              border: "1px solid #005ea8",
+              background: "#005ea8",
+              color: "#ffffff",
+              borderRadius: "4px",
               padding: "8px 13px",
               cursor: "pointer",
-              fontWeight: "900",
+              fontWeight: "700",
             }}
           >
             Close
@@ -995,34 +917,13 @@ export default function App() {
         >
           {selectedCrew && (
             <>
-              <div
-                style={{
-                  border: "1px solid rgba(148, 163, 184, 0.3)",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                  display: "grid",
-                  gap: "10px",
-                }}
-              >
+              <DetailBox title="Current Risk">
                 <p
                   style={{
                     margin: 0,
-                    color: "#64748b",
-                    fontSize: "12px",
-                    fontWeight: "900",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Current Risk
-                </p>
-
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#0f172a",
+                    color: "#112f4e",
                     fontSize: "24px",
-                    fontWeight: "950",
+                    fontWeight: "900",
                   }}
                 >
                   {selectedCrew.riskSource === "pending"
@@ -1036,10 +937,10 @@ export default function App() {
                         getSeverityShortLabel(selectedCrew.risk_score)
                       }`}
                 </p>
-              </div>
+              </DetailBox>
 
               {selectedCrew.riskSource === "api" && selectedCrew.confidence && (
-                <p style={{ ...panelText, color: "#64748b" }}>
+                <p style={{ ...panelText, color: "#565c65" }}>
                   <strong style={cardStrong}>Analysis confidence:</strong>{" "}
                   {selectedCrew.confidence}
                   {selectedCrew.analyzed_at && (
@@ -1049,81 +950,59 @@ export default function App() {
               )}
 
               {selectedCrew.riskSource === "error" && (
-                <p style={{ ...panelText, color: "#991b1b" }}>
+                <p style={{ ...panelText, color: "#8b0a03" }}>
                   <strong style={cardStrong}>Analysis:</strong> unavailable —{" "}
                   {selectedCrew.riskErrorMessage}
                 </p>
               )}
 
-              <div
-                style={{
-                  border: "1px solid rgba(148, 163, 184, 0.3)",
-                  borderRadius: "18px",
-                  padding: "16px",
-                  background: "#f8fafc",
-                  display: "grid",
-                  gap: "8px",
-                }}
-              >
+              <DetailBox title="Crew Telemetry">
                 <p style={panelText}>
                   <strong style={cardStrong}>Unit:</strong>{" "}
                   {selectedCrew.unit_id}
                 </p>
-
                 <p style={panelText}>
                   <strong style={cardStrong}>Last seen:</strong>{" "}
                   {selectedCrew.last_seen_minutes} min ago
                 </p>
-
                 <p style={panelText}>
                   <strong style={cardStrong}>Battery:</strong>{" "}
                   {selectedCrew.battery}%
                 </p>
-
                 <p style={panelText}>
                   <strong style={cardStrong}>Latitude:</strong>{" "}
                   {selectedCrew.lat}
                 </p>
-
                 <p style={panelText}>
                   <strong style={cardStrong}>Longitude:</strong>{" "}
                   {selectedCrew.lon}
                 </p>
-              </div>
+              </DetailBox>
 
               {selectedCrew.riskSource === "api" && (
                 <>
-                  <div
-                    style={{
-                      border: "1px solid rgba(148, 163, 184, 0.3)",
-                      borderRadius: "18px",
-                      padding: "16px",
-                      background: "#f8fafc",
-                      display: "grid",
-                      gap: "10px",
-                    }}
-                  >
+                  <DetailBox title="AI Summary">
                     <p style={panelText}>
                       <strong style={cardStrong}>Primary reason:</strong>{" "}
                       {selectedCrew.primary_reason}
                     </p>
 
                     {selectedCrew.explanation && (
-                      <p style={panelText}>
+                      <p style={{ ...panelText, marginTop: "8px" }}>
                         <strong style={cardStrong}>AI explanation:</strong>{" "}
                         {selectedCrew.explanation}
                       </p>
                     )}
 
                     {selectedCrew.risk_reasons?.length > 0 && (
-                      <div>
+                      <div style={{ marginTop: "8px" }}>
                         <strong style={cardStrong}>Risk factors:</strong>
                         <ul
                           style={{
                             margin: "6px 0 0 0",
                             paddingLeft: "18px",
                             lineHeight: 1.4,
-                            color: "#334155",
+                            color: "#1b1b1b",
                           }}
                         >
                           {selectedCrew.risk_reasons.map((reason, idx) => (
@@ -1132,7 +1011,7 @@ export default function App() {
                         </ul>
                       </div>
                     )}
-                  </div>
+                  </DetailBox>
 
                   {selectedCrew.weather && (
                     <DetailBox title="Weather">
@@ -1150,50 +1029,82 @@ export default function App() {
                       )}
                     </DetailBox>
                   )}
-
-                  {selectedCrew.camera && (
-                    <DetailBox title="Camera">
-                      <p style={{ margin: 0 }}>
-                        {selectedCrew.camera.camera_caption ?? "—"}
-                      </p>
-                      <p
-                        style={{
-                          margin: "6px 0 0 0",
-                          fontSize: "13px",
-                          color: "#64748b",
-                        }}
-                      >
-                        Available:{" "}
-                        {selectedCrew.camera.camera_available ? "yes" : "no"} ·
-                        Visibility:{" "}
-                        {selectedCrew.camera.visibility_status ?? "—"} · Hazard:{" "}
-                        {selectedCrew.camera.hazard_detected ? "yes" : "no"}
-                      </p>
-                      {selectedCrew.camera.image_url && (
-                        <a
-                          href={selectedCrew.camera.image_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            display: "inline-flex",
-                            width: "fit-content",
-                            marginTop: "10px",
-                            padding: "9px 12px",
-                            borderRadius: "999px",
-                            background: "#e0f2fe",
-                            border: "1px solid rgba(2, 132, 199, 0.35)",
-                            color: "#0369a1",
-                            fontWeight: 900,
-                            fontSize: "13px",
-                            textDecoration: "none",
-                          }}
-                        >
-                          Open camera image
-                        </a>
-                      )}
-                    </DetailBox>
-                  )}
                 </>
+              )}
+
+              {selectedCrew.camera && (
+                <DetailBox title="Camera">
+                  <p style={{ margin: 0 }}>
+                    {selectedCrew.camera.camera_caption ??
+                      "Camera feed available for review."}
+                  </p>
+
+                  {selectedCrew.camera.is_mock && (
+                    <p
+                      style={{
+                        margin: "8px 0 0",
+                        color: "#7d4600",
+                        background: "#fff4ce",
+                        border: "1px solid #ffbe2e",
+                        borderRadius: "4px",
+                        padding: "8px",
+                        fontSize: "13px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Mock camera feed for demo purposes
+                    </p>
+                  )}
+
+                  <p
+                    style={{
+                      margin: "8px 0 0",
+                      fontSize: "13px",
+                      color: "#565c65",
+                    }}
+                  >
+                    Available:{" "}
+                    {selectedCrew.camera.camera_available ? "yes" : "no"} ·
+                    Visibility:{" "}
+                    {selectedCrew.camera.visibility_status ?? "reduced"} · Hazard:{" "}
+                    {selectedCrew.camera.hazard_detected ? "yes" : "no"}
+                  </p>
+
+                  <img
+                    src={selectedCrew.camera.image_url || mockCameraFire}
+                    alt={`${selectedCrew.unit_id} camera feed`}
+                    style={{
+                      width: "100%",
+                      marginTop: "10px",
+                      borderRadius: "4px",
+                      border: "1px solid #c9c9c9",
+                      objectFit: "cover",
+                      maxHeight: "220px",
+                      display: "block",
+                    }}
+                  />
+
+                  <a
+                    href={selectedCrew.camera.image_url || mockCameraFire}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "inline-flex",
+                      width: "fit-content",
+                      marginTop: "10px",
+                      padding: "8px 12px",
+                      borderRadius: "4px",
+                      background: "#005ea8",
+                      border: "1px solid #005ea8",
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      fontSize: "13px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    Open camera image
+                  </a>
+                </DetailBox>
               )}
 
               {selectedCrew.riskSource === "api" &&
@@ -1202,13 +1113,13 @@ export default function App() {
                     style={{
                       marginTop: "2px",
                       padding: "14px",
-                      background: "#e0f2fe",
-                      border: "1px solid rgba(2, 132, 199, 0.25)",
-                      borderLeft: "5px solid #0284c7",
-                      color: "#0f172a",
+                      background: "#eef7ff",
+                      border: "1px solid #005ea8",
+                      borderLeft: "5px solid #005ea8",
+                      color: "#112f4e",
                       fontWeight: "800",
                       lineHeight: 1.45,
-                      borderRadius: "14px",
+                      borderRadius: "4px",
                     }}
                   >
                     <strong>Recommended command review:</strong>{" "}
@@ -1221,13 +1132,13 @@ export default function App() {
                   style={{
                     marginTop: "2px",
                     padding: "14px",
-                    background: "#e0f2fe",
-                    border: "1px solid rgba(2, 132, 199, 0.25)",
-                    borderLeft: "5px solid #0284c7",
-                    color: "#0f172a",
+                    background: "#eef7ff",
+                    border: "1px solid #005ea8",
+                    borderLeft: "5px solid #005ea8",
+                    color: "#112f4e",
                     fontWeight: "800",
                     lineHeight: 1.45,
-                    borderRadius: "14px",
+                    borderRadius: "4px",
                   }}
                 >
                   Full AI briefing appears after backend analysis completes.
@@ -1241,38 +1152,93 @@ export default function App() {
   );
 }
 
-function MetricCard({ label, value, color }) {
+function CameraCard({ crew, mockCameraFire }) {
   return (
     <div
       style={{
-        background: "rgba(255,255,255,0.85)",
-        border: "1px solid rgba(148, 163, 184, 0.35)",
-        borderRadius: "16px",
+        marginTop: "10px",
         padding: "12px",
-        boxShadow: "0 10px 24px rgba(15,23,42,0.08)",
+        borderRadius: "4px",
+        background: "#f7f9fa",
+        border: "1px solid #c9c9c9",
       }}
     >
+      <p style={{ color: "#1b1b1b", margin: 0, lineHeight: 1.4, fontSize: "14px" }}>
+        <strong style={{ color: "#111827", fontWeight: 800 }}>Camera:</strong>{" "}
+        {crew.camera.camera_caption ?? "Camera feed available for review."}
+        {crew.camera.camera_risk_level && (
+          <> · risk {crew.camera.camera_risk_level}</>
+        )}
+      </p>
+
+      {crew.camera.is_mock && (
+        <p
+          style={{
+            margin: "8px 0 0",
+            color: "#7d4600",
+            background: "#fff4ce",
+            border: "1px solid #ffbe2e",
+            borderRadius: "4px",
+            padding: "8px",
+            fontSize: "13px",
+            fontWeight: 700,
+          }}
+        >
+          Mock camera feed for demo purposes
+        </p>
+      )}
+
       <p
         style={{
-          margin: 0,
-          fontSize: "11px",
-          color: "#64748b",
-          fontWeight: 900,
-          textTransform: "uppercase",
+          margin: "8px 0 0",
+          color: "#565c65",
+          fontSize: "13px",
+          lineHeight: 1.35,
+          fontWeight: 700,
         }}
       >
-        {label}
+        Available: {crew.camera.camera_available ? "yes" : "no"} · Visibility:{" "}
+        {crew.camera.visibility_status ?? "reduced"} · Hazard:{" "}
+        {crew.camera.hazard_detected ? "yes" : "no"}
       </p>
-      <p
+
+      <img
+        src={crew.camera.image_url || mockCameraFire}
+        alt={`${crew.unit_id} camera feed`}
+        onClick={(event) => event.stopPropagation()}
         style={{
-          margin: "4px 0 0",
-          fontSize: "26px",
-          fontWeight: 950,
-          color,
+          width: "100%",
+          marginTop: "10px",
+          borderRadius: "4px",
+          border: "1px solid #c9c9c9",
+          objectFit: "cover",
+          maxHeight: "180px",
+          display: "block",
+        }}
+      />
+
+      <a
+        href={crew.camera.image_url || mockCameraFire}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: "10px",
+          padding: "8px 12px",
+          borderRadius: "4px",
+          background: "#005ea8",
+          border: "1px solid #005ea8",
+          color: "#ffffff",
+          fontWeight: 700,
+          fontSize: "13px",
+          textDecoration: "none",
         }}
       >
-        {value}
-      </p>
+        Open camera image
+      </a>
     </div>
   );
 }
@@ -1281,18 +1247,20 @@ function InfoStrip({ label, value }) {
   return (
     <div
       style={{
-        background: "#f8fafc",
-        border: "1px solid rgba(148, 163, 184, 0.28)",
-        borderRadius: "16px",
+        background: "#f7f9fa",
+        border: "1px solid #c9c9c9",
+        borderRadius: "4px",
         padding: "12px",
       }}
     >
       <p
         style={{
           margin: 0,
-          color: "#64748b",
+          color: "#565c65",
           fontSize: "12px",
-          fontWeight: 850,
+          fontWeight: 800,
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
         }}
       >
         {label}
@@ -1300,9 +1268,9 @@ function InfoStrip({ label, value }) {
       <p
         style={{
           margin: "4px 0 0",
-          color: "#0f172a",
+          color: "#1b1b1b",
           fontSize: "16px",
-          fontWeight: 950,
+          fontWeight: 900,
         }}
       >
         {value}
@@ -1317,15 +1285,15 @@ function DetailBox({ title, children }) {
       style={{
         margin: 0,
         padding: "14px",
-        background: "#f8fafc",
-        border: "1px solid rgba(148, 163, 184, 0.3)",
-        borderRadius: "16px",
-        color: "#334155",
-        lineHeight: 1.4,
+        background: "#f7f9fa",
+        border: "1px solid #c9c9c9",
+        borderRadius: "4px",
+        color: "#1b1b1b",
+        lineHeight: 1.45,
       }}
     >
-      <strong style={{ color: "#0f172a" }}>{title}</strong>
-      <div style={{ marginTop: "6px" }}>{children}</div>
+      <strong style={{ color: "#112f4e", fontWeight: 900 }}>{title}</strong>
+      <div style={{ marginTop: "8px" }}>{children}</div>
     </div>
   );
 }

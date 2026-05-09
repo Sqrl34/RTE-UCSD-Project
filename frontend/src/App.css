@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  background: #f8fafc;
+  background: #f5f5f5;
 }
 
 #root {
@@ -15,11 +15,11 @@ body {
 .leaflet-container {
   width: 100%;
   height: 100%;
-  background: #e0f2fe;
+  background: #f7f9fa;
 }
 
 input::placeholder {
-  color: #94a3b8;
+  color: #71767a;
 }
 
 button {
@@ -31,14 +31,14 @@ button {
 }
 
 ::-webkit-scrollbar-track {
-  background: #e2e8f0;
+  background: #f0f0f0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #94a3b8;
+  background: #a9aeb1;
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #71767a;
 }
