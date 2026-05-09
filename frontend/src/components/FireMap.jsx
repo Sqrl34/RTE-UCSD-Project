@@ -105,8 +105,8 @@ export default function FireMap({
       }}
     >
       <MapContainer
-        center={[38.5816, -121.4944]}
-        zoom={13}
+        center={[32.7757, -117.0719]}
+        zoom={14}
         scrollWheelZoom={true}
         style={{
           height: "600px",
