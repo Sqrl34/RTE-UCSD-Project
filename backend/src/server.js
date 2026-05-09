@@ -21,7 +21,7 @@ app.use(express.json({ limit: "10mb" }));
 
 app.get("/", (req, res) => {
   res.json({
-    name: "Fireline Breadcrumb Backend",
+    name: "CrewTrace",
     status: "running",
     endpoints: {
       health: "GET /health",
