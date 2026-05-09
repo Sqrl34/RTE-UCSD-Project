@@ -1,16 +1,29 @@
-const express = require('express')
-const cors = require('cors')
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
 
-const app = express()
-const port = process.env.PORT || 4000
+const crewRoutes = require("./routes/crews");
+const exportRoutes = require("./routes/exports");
+const classificationRoutes = require("./routes/classification");
 
-app.use(cors())
-app.use(express.json())
+const app = express();
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' })
-})
+app.use(cors());
+app.use(express.json());
 
-app.listen(port, () => {
-  console.log(`Backend API listening on http://localhost:${port}`)
-})
+app.get("/", (req, res) => {
+  res.json({
+    name: "Crew Trace Backend",
+    status: "running"
+  });
+});
+
+app.use("/api/crews", crewRoutes);
+app.use("/api/export", exportRoutes);
+app.use("/api/classification", classificationRoutes);
+
+const PORT = 5000;
+
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
