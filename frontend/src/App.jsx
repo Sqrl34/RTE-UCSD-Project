@@ -10,6 +10,7 @@ import {
   cameraLocations,
   windArrows,
 } from "./data/mockMapData";
+import mockCameraFire from "./assets/mockfire.png";
 
 const severityLevels = [
   { level: 1, description: "Minimal risk. Routine monitoring only." },
@@ -96,10 +97,39 @@ export default function App() {
   }, []);
 
   const mergedCrews = useMemo(() => {
-    return mockCrews.map((mock) =>
-      applyAnalysisToMock(mock, analysisByUnitId[mock.unit_id])
-    );
-  }, [analysisByUnitId]);
+  return mockCrews.map((mock) => {
+    const crew = applyAnalysisToMock(mock, analysisByUnitId[mock.unit_id]);
+
+    if (crew.unit_id === "Alpha-3") {
+      return {
+        ...crew,
+        risk_score: Math.max(Number(crew.risk_score) || 0, 9),
+        risk_level: "Critical risk",
+        primary_reason:
+          "Mock camera feed shows visible flame activity near Alpha-8 position.",
+        explanation:
+          "Alpha-8 is near the camera sector where the mock fire image indicates visible flames and smoke. Combined with stale check-in timing, this crew should be prioritized for command review.",
+        risk_reasons: [
+          ...(crew.risk_reasons ?? []),
+          "Mock camera image shows visible flames near Alpha-8.",
+          "Smoke and flame activity may affect visibility and escape route safety.",
+        ],
+        camera: {
+          ...(crew.camera ?? {}),
+          camera_available: true,
+          camera_caption:
+            "Mock camera view detects visible flames and smoke near Alpha-8.",
+          camera_risk_level: "high",
+          visibility_status: "reduced",
+          hazard_detected: true,
+          image_url: mockCameraFire,
+        },
+      };
+    }
+
+    return crew;
+  });
+}, [analysisByUnitId]);
 
   const selectedCrew =
     mergedCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
@@ -699,10 +729,26 @@ export default function App() {
                       >
                         <p style={{ ...cardText, margin: 0 }}>
                           <strong style={cardStrong}>Camera:</strong>{" "}
-                          {crew.camera.camera_caption ?? "—"}
+                          {crew.camera.camera_caption ??
+                            "Mock camera shows smoke and visible flame activity near the ridge."}
                           {crew.camera.camera_risk_level && (
                             <> · risk {crew.camera.camera_risk_level}</>
                           )}
+                        </p>
+
+                        <p
+                          style={{
+                            margin: "8px 0 0",
+                            color: "#92400e",
+                            background: "#fef3c7",
+                            border: "1px solid #f59e0b",
+                            borderRadius: "10px",
+                            padding: "8px",
+                            fontSize: "13px",
+                            fontWeight: 800,
+                          }}
+                        >
+                          Mock camera feed for demo purposes
                         </p>
 
                         <p
@@ -716,45 +762,47 @@ export default function App() {
                         >
                           Available:{" "}
                           {crew.camera.camera_available ? "yes" : "no"} ·
-                          Visibility: {crew.camera.visibility_status ?? "—"} ·
-                          Hazard: {crew.camera.hazard_detected ? "yes" : "no"}
+                          Visibility: {crew.camera.visibility_status ?? "reduced"} ·
+                          Hazard: {crew.camera.hazard_detected ? "yes" : "yes"}
                         </p>
 
-                        {crew.camera.image_url ? (
-                          <a
-                            href={crew.camera.image_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(event) => event.stopPropagation()}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              marginTop: "10px",
-                              padding: "9px 12px",
-                              borderRadius: "999px",
-                              background: "#e0f2fe",
-                              border: "1px solid rgba(2, 132, 199, 0.35)",
-                              color: "#0369a1",
-                              fontWeight: 900,
-                              fontSize: "13px",
-                              textDecoration: "none",
-                            }}
-                          >
-                            Open camera image
-                          </a>
-                        ) : (
-                          <p
-                            style={{
-                              margin: "8px 0 0",
-                              color: "#64748b",
-                              fontSize: "13px",
-                              fontStyle: "italic",
-                            }}
-                          >
-                            No camera image available for this crew.
-                          </p>
-                        )}
+                        <img
+                          src={crew.camera.image_url || mockCameraFire}
+                          alt={`${crew.unit_id} mock wildfire camera feed`}
+                          onClick={(event) => event.stopPropagation()}
+                          style={{
+                            width: "100%",
+                            marginTop: "10px",
+                            borderRadius: "12px",
+                            border: "1px solid rgba(148, 163, 184, 0.35)",
+                            objectFit: "cover",
+                            maxHeight: "180px",
+                            display: "block",
+                          }}
+                        />
+
+                        <a
+                          href={crew.camera.image_url || mockCameraFire}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(event) => event.stopPropagation()}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginTop: "10px",
+                            padding: "9px 12px",
+                            borderRadius: "999px",
+                            background: "#e0f2fe",
+                            border: "1px solid rgba(2, 132, 199, 0.35)",
+                            color: "#0369a1",
+                            fontWeight: 900,
+                            fontSize: "13px",
+                            textDecoration: "none",
+                          }}
+                        >
+                          Open camera image
+                        </a>
                       </div>
                     )}
                   </>
@@ -1154,8 +1202,25 @@ export default function App() {
                   {selectedCrew.camera && (
                     <DetailBox title="Camera">
                       <p style={{ margin: 0 }}>
-                        {selectedCrew.camera.camera_caption ?? "—"}
+                        {selectedCrew.camera.camera_caption ??
+                          "Mock camera shows smoke and visible flame activity near the ridge."}
                       </p>
+
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          color: "#92400e",
+                          background: "#fef3c7",
+                          border: "1px solid #f59e0b",
+                          borderRadius: "10px",
+                          padding: "8px",
+                          fontSize: "13px",
+                          fontWeight: 800,
+                        }}
+                      >
+                        Mock camera feed for demo purposes
+                      </p>
+
                       <p
                         style={{
                           margin: "6px 0 0 0",
@@ -1166,31 +1231,44 @@ export default function App() {
                         Available:{" "}
                         {selectedCrew.camera.camera_available ? "yes" : "no"} ·
                         Visibility:{" "}
-                        {selectedCrew.camera.visibility_status ?? "—"} · Hazard:{" "}
-                        {selectedCrew.camera.hazard_detected ? "yes" : "no"}
+                        {selectedCrew.camera.visibility_status ?? "reduced"} · Hazard:{" "}
+                        {selectedCrew.camera.hazard_detected ? "yes" : "yes"}
                       </p>
-                      {selectedCrew.camera.image_url && (
-                        <a
-                          href={selectedCrew.camera.image_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            display: "inline-flex",
-                            width: "fit-content",
-                            marginTop: "10px",
-                            padding: "9px 12px",
-                            borderRadius: "999px",
-                            background: "#e0f2fe",
-                            border: "1px solid rgba(2, 132, 199, 0.35)",
-                            color: "#0369a1",
-                            fontWeight: 900,
-                            fontSize: "13px",
-                            textDecoration: "none",
-                          }}
-                        >
-                          Open camera image
-                        </a>
-                      )}
+
+                      <img
+                        src={selectedCrew.camera.image_url || mockCameraFire}
+                        alt={`${selectedCrew.unit_id} mock wildfire camera feed`}
+                        style={{
+                          width: "100%",
+                          marginTop: "10px",
+                          borderRadius: "12px",
+                          border: "1px solid rgba(148, 163, 184, 0.35)",
+                          objectFit: "cover",
+                          maxHeight: "220px",
+                          display: "block",
+                        }}
+                      />
+
+                      <a
+                        href={selectedCrew.camera.image_url || mockCameraFire}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          width: "fit-content",
+                          marginTop: "10px",
+                          padding: "9px 12px",
+                          borderRadius: "999px",
+                          background: "#e0f2fe",
+                          border: "1px solid rgba(2, 132, 199, 0.35)",
+                          color: "#0369a1",
+                          fontWeight: 900,
+                          fontSize: "13px",
+                          textDecoration: "none",
+                        }}
+                      >
+                        Open camera image
+                      </a>
                     </DetailBox>
                   )}
                 </>
