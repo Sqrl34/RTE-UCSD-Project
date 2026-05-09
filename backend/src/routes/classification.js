@@ -10,7 +10,10 @@ const router = express.Router();
 const camerasData = require("../data/alert_california_cameras.json");
 
 const ROBOFLOW_MODEL_URL = "https://detect.roboflow.com/wildfire-smoke/1";
-const ROBOFLOW_CONFIDENCE = 10;
+// Min confidence (0–100) for boxes returned by Roboflow — higher reduces junk detections.
+const ROBOFLOW_CONFIDENCE = Math.round(
+  Math.min(90, Math.max(15, Number(process.env.ROBOFLOW_CONFIDENCE_MIN) || 35))
+);
 
 // Smaller radius + camera cap to reduce noise and API calls
 const MAX_DISTANCE_MILES = 5;
@@ -125,9 +128,10 @@ function getBestPrediction(results) {
   };
 }
 
-// Stricter thresholds to reduce false positives
+// Stricter thresholds to reduce false positives (clouds, haze, JPEG artifacts).
 function classifyRisk(best) {
-  if (!best || best.confidence < 0.35) {
+  const minDetect = 0.52;
+  if (!best || best.confidence < minDetect) {
     return {
       detected: false,
       riskLevel: "none",
@@ -135,7 +139,7 @@ function classifyRisk(best) {
     };
   }
 
-  if (best.confidence >= 0.7) {
+  if (best.confidence >= 0.78) {
     return {
       detected: true,
       riskLevel: "high",
@@ -143,7 +147,7 @@ function classifyRisk(best) {
     };
   }
 
-  if (best.confidence >= 0.5) {
+  if (best.confidence >= 0.64) {
     return {
       detected: true,
       riskLevel: "medium",
@@ -154,7 +158,7 @@ function classifyRisk(best) {
   return {
     detected: true,
     riskLevel: "low",
-    message: "Weak smoke/fire signal detected",
+    message: "Uncertain smoke-like signal — verify visually",
   };
 }
 
