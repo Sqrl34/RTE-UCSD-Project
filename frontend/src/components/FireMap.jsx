@@ -10,10 +10,27 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const riskColor = (score) => {
-  if (score >= 8) return "#cd2026";
-  if (score >= 6) return "#e59323";
-  if (score === 5) return "#eab308";
+  const n = Number(score);
+  if (!Number.isFinite(n)) return "#94a3b8";
+  if (n >= 8) return "#cd2026";
+  if (n >= 6) return "#e59323";
+  if (n === 5) return "#eab308";
   return "#2e8540";
+};
+
+const riskScoreLabel = (score) => {
+  const n = Number(score);
+  return Number.isFinite(n) ? String(Math.round(n)) : "?";
+};
+
+const markerBackgroundForCrew = (crew) => {
+  if (crew.riskSource === "pending") return "#94a3b8";
+  return riskColor(crew.risk_score);
+};
+
+const markerLabelForCrew = (crew) => {
+  if (crew.riskSource === "pending") return "";
+  return riskScoreLabel(crew.risk_score);
 };
 
 const createCrewIcon = (crew, isSelected = false) =>
@@ -21,7 +38,7 @@ const createCrewIcon = (crew, isSelected = false) =>
     className: "crew-marker",
     html: `
       <div style="
-        background:${riskColor(crew.risk_score)};
+        background:${markerBackgroundForCrew(crew)};
         color:white;
         border-radius:999px;
         width:${isSelected ? "44px" : "36px"};
@@ -33,7 +50,7 @@ const createCrewIcon = (crew, isSelected = false) =>
         border:${isSelected ? "3px solid #205493" : "2px solid white"};
         box-shadow:${isSelected ? "0 0 0 4px rgba(32,84,147,0.25), 0 4px 10px rgba(0,0,0,0.35)" : "0 2px 8px rgba(0,0,0,0.35)"};
       ">
-        ${crew.risk_score}
+        ${markerLabelForCrew(crew)}
       </div>
     `,
     iconSize: isSelected ? [44, 44] : [36, 36],
@@ -158,13 +175,36 @@ export default function FireMap({
             <Popup>
               <strong>{crew.unit_id}</strong>
               <br />
-              Risk: {crew.risk_score}/10
-              <br />
+              {crew.riskSource === "pending" && <>Analyzing…</>}
+              {crew.riskSource === "error" && (
+                <>
+                  Risk (telemetry): {riskScoreLabel(crew.risk_score)}/10
+                  <br />
+                </>
+              )}
+              {crew.riskSource === "api" && (
+                <>
+                  Risk: {riskScoreLabel(crew.risk_score)}/10 — {crew.risk_level ?? ""}
+                  <br />
+                  {crew.primary_reason && crew.primary_reason !== "—" && (
+                    <>
+                      {crew.primary_reason}
+                      <br />
+                    </>
+                  )}
+                </>
+              )}
+              {!crew.riskSource && (
+                <>
+                  Risk: {riskScoreLabel(crew.risk_score)}/10
+                  <br />
+                  Reason: {crew.primary_reason}
+                  <br />
+                </>
+              )}
               Last seen: {crew.last_seen_minutes} min ago
               <br />
               Battery: {crew.battery}%
-              <br />
-              Reason: {crew.primary_reason}
             </Popup>
           </Marker>
         ))}

@@ -6,7 +6,6 @@ export const mockCrews = [
     battery: 82,
     last_seen_minutes: 1,
     risk_score: 3,
-    transcript: "Conditions stable. Continuing north near campus perimeter.",
     primary_reason: "No major risk indicators detected",
   },
   {
@@ -16,7 +15,6 @@ export const mockCrews = [
     battery: 68,
     last_seen_minutes: 2,
     risk_score: 7,
-    transcript: "Visibility is getting worse and wind is picking up from the west.",
     primary_reason: "Wind shift pushing smoke toward crew location",
   },
   {
@@ -26,7 +24,6 @@ export const mockCrews = [
     battery: 24,
     last_seen_minutes: 7,
     risk_score: 8,
-    transcript: "Poor visibility near ridge above the canyon.",
     primary_reason: "Stale check-in and smoke exposure near hazard boundary",
   },
   {
@@ -36,7 +33,6 @@ export const mockCrews = [
     battery: 74,
     last_seen_minutes: 1,
     risk_score: 5,
-    transcript: "Crossing fuel break and maintaining line integrity.",
     primary_reason: "Moderate wind and uneven terrain near flank",
   },
   {
@@ -46,7 +42,6 @@ export const mockCrews = [
     battery: 63,
     last_seen_minutes: 3,
     risk_score: 6,
-    transcript: "Smoke density increasing near drainage route.",
     primary_reason: "Reduced visibility and rising ambient heat",
   },
   {
@@ -56,7 +51,6 @@ export const mockCrews = [
     battery: 55,
     last_seen_minutes: 2,
     risk_score: 4,
-    transcript: "Holding position and awaiting route confirmation.",
     primary_reason: "Temporary route uncertainty near hazard edge",
   },
   {
@@ -66,7 +60,6 @@ export const mockCrews = [
     battery: 47,
     last_seen_minutes: 4,
     risk_score: 7,
-    transcript: "Rapid wind shift observed near ridge top.",
     primary_reason: "Escalating wind behavior close to active perimeter",
   },
   {
@@ -76,7 +69,6 @@ export const mockCrews = [
     battery: 38,
     last_seen_minutes: 6,
     risk_score: 9,
-    transcript: "Crew reporting spot fire activity behind position.",
     primary_reason: "Spotting behavior and delayed status verification",
   },
 ];
