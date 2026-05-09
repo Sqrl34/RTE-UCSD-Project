@@ -112,24 +112,26 @@ export default function FireMap({
 }) {
   return (
     <div
-      style={{
-        height: "600px",
-        width: "100%",
-        borderRadius: "16px",
-        overflow: "hidden",
-        border: "2px solid #cbd5e1",
-        background: "#e2e8f0",
-      }}
-    >
+  style={{
+    height: "100%",
+    minHeight: "560px",
+    width: "100%",
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid rgba(125, 211, 252, 0.35)",
+    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.04)",
+    background: "#0f172a",
+  }}
+>
       <MapContainer
-        center={[32.7757, -117.0719]}
-        zoom={14}
-        scrollWheelZoom={true}
-        style={{
-          height: "600px",
-          width: "100%",
-        }}
-      >
+  center={[32.7757, -117.0719]}
+  zoom={14}
+  scrollWheelZoom={true}
+  style={{
+    height: "100%",
+    width: "100%",
+  }}
+>
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
