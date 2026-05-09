@@ -1,53 +1,56 @@
 export const hazardZone = [
-  [38.59, -121.51],
-  [38.595, -121.485],
-  [38.575, -121.475],
-  [38.568, -121.5],
+  [32.7895, -117.071],
+  [32.7965, -117.056],
+  [32.786, -117.044],
+  [32.7705, -117.052],
+  [32.768, -117.069],
 ];
 
 export const escapeRoutes = [
   {
     id: "route-b",
-    name: "Route B South",
+    name: "Route B South toward Montezuma Road",
     path: [
-      [38.5816, -121.4944],
-      [38.57, -121.492],
-      [38.56, -121.488],
+      [32.7798, -117.0635],
+      [32.775, -117.066],
+      [32.7705, -117.0705],
+      [32.765, -117.075],
     ],
   },
   {
     id: "route-c",
-    name: "Route C West",
+    name: "Route C West toward College Avenue",
     path: [
-      [38.588, -121.489],
-      [38.586, -121.5],
-      [38.582, -121.512],
+      [32.7844, -117.0568],
+      [32.783, -117.063],
+      [32.7805, -117.0705],
+      [32.777, -117.078],
     ],
   },
 ];
 
 export const cameraLocations = [
   {
-    id: "camera-east-ridge",
-    name: "East Ridge Camera",
-    lat: 38.586,
-    lon: -121.486,
-    summary: "Smoke increasing eastward near ridge.",
+    id: "camera-sdsu-ridge",
+    name: "SDSU Ridge Camera",
+    lat: 32.787,
+    lon: -117.052,
+    summary: "Smoke increasing near canyon ridge east of campus.",
   },
 ];
 
 export const windArrows = [
   {
     id: "wind-1",
-    lat: 38.589,
-    lon: -121.503,
+    lat: 32.791,
+    lon: -117.068,
     direction: "W → E",
     speed: "18 mph",
   },
   {
     id: "wind-2",
-    lat: 38.578,
-    lon: -121.49,
+    lat: 32.771,
+    lon: -117.058,
     direction: "W → E",
     speed: "16 mph",
   },

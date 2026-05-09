@@ -23,10 +23,10 @@ const severityLevels = [
 ];
 
 const getSeverityColor = (level) => {
-  if (level >= 8) return "#cd2026"; // red
-  if (level >= 6) return "#e59323"; // orange
-  if (level === 5) return "#eab308"; // yellow for level 5
-  return "#2e8540"; // green
+  if (level >= 8) return "#cd2026";
+  if (level >= 6) return "#e59323";
+  if (level === 5) return "#eab308";
+  return "#2e8540";
 };
 
 const getSeverityShortLabel = (level) => {
@@ -44,29 +44,43 @@ export default function App() {
   const [focusedCrewId, setFocusedCrewId] = useState(null);
   const [isRiskPanelOpen, setIsRiskPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const selectedCrew = mockCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
+
   const cardRefs = useRef({});
+
+  const selectedCrew =
+    mockCrews.find((crew) => crew.unit_id === selectedCrewId) ?? null;
+
   const sortedCrews = useMemo(() => {
-    const crews = [...mockCrews];
-
-    crews.sort((a, b) => b.risk_score - a.risk_score || b.last_seen_minutes - a.last_seen_minutes);
-
-    return crews;
+    return [...mockCrews].sort(
+      (a, b) =>
+        b.risk_score - a.risk_score ||
+        b.last_seen_minutes - a.last_seen_minutes
+    );
   }, []);
+
   const filteredCrews = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+
     if (!query) return sortedCrews;
-    return sortedCrews.filter((crew) => crew.unit_id.toLowerCase().includes(query));
+
+    return sortedCrews.filter((crew) =>
+      crew.unit_id.toLowerCase().includes(query)
+    );
   }, [searchQuery, sortedCrews]);
 
   const focusCrewCard = (unitId) => {
     setSelectedCrewId(unitId);
     setFocusedCrewId(unitId);
     setSearchQuery("");
+
     requestAnimationFrame(() => {
       const cardEl = cardRefs.current[unitId];
       if (!cardEl) return;
-      cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      cardEl.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
     });
   };
 
@@ -104,17 +118,19 @@ export default function App() {
           >
             CrewTrace Incident Operations Dashboard
           </p>
+
           <h1
             style={{
               fontSize: "46px",
               lineHeight: 1.05,
               fontWeight: "700",
               margin: "6px 0 10px 0",
-              color: "#fff",
+              color: "#ffffff",
             }}
           >
             Crew Trace
           </h1>
+
           <p
             style={{
               fontSize: "19px",
@@ -143,12 +159,12 @@ export default function App() {
           overflow: "hidden",
         }}
       >
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
           <h2
             style={{
               fontSize: "24px",
               fontWeight: "700",
-              marginBottom: "12px",
+              margin: "0 0 12px 0",
               color: "#112e51",
               letterSpacing: "0.2px",
             }}
@@ -156,15 +172,17 @@ export default function App() {
             Live Field Map
           </h2>
 
-          <FireMap
-            crews={mockCrews}
-            hazardZone={hazardZone}
-            escapeRoutes={escapeRoutes}
-            cameraLocations={cameraLocations}
-            windArrows={windArrows}
-            selectedCrewId={selectedCrewId}
-            onCrewSelect={focusCrewCard}
-          />
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <FireMap
+              crews={mockCrews}
+              hazardZone={hazardZone}
+              escapeRoutes={escapeRoutes}
+              cameraLocations={cameraLocations}
+              windArrows={windArrows}
+              selectedCrewId={selectedCrewId}
+              onCrewSelect={focusCrewCard}
+            />
+          </div>
         </div>
 
         <aside
@@ -192,16 +210,23 @@ export default function App() {
           >
             <label
               htmlFor="crew-name-search"
-              style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#3d4551", marginBottom: "6px" }}
+              style={{
+                display: "block",
+                fontSize: "12px",
+                fontWeight: "700",
+                color: "#3d4551",
+                marginBottom: "6px",
+              }}
             >
               SEARCH CREW
             </label>
+
             <input
               id="crew-name-search"
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Type crew name (e.g. Alpha-3)"
+              placeholder="Type crew name, e.g. Alpha-3"
               style={{
                 width: "100%",
                 border: "1px solid #5c5c5c",
@@ -214,6 +239,7 @@ export default function App() {
               }}
             />
           </div>
+
           {filteredCrews.map((crew) => (
             <div
               key={crew.unit_id}
@@ -229,7 +255,10 @@ export default function App() {
                 border: "1px solid #aeb0b5",
                 borderRadius: "4px",
                 padding: "16px",
-                boxShadow: focusedCrewId === crew.unit_id ? "0 0 0 2px #205493 inset" : "none",
+                boxShadow:
+                  focusedCrewId === crew.unit_id
+                    ? "0 0 0 2px #205493 inset"
+                    : "none",
                 textAlign: "left",
                 cursor: "pointer",
               }}
@@ -242,7 +271,14 @@ export default function App() {
                   gap: "16px",
                 }}
               >
-                <h2 style={{ fontSize: "22px", fontWeight: "700", margin: 0, color: "#112e51" }}>
+                <h2
+                  style={{
+                    fontSize: "22px",
+                    fontWeight: "700",
+                    margin: 0,
+                    color: "#112e51",
+                  }}
+                >
                   {crew.unit_id}
                 </h2>
 
@@ -262,12 +298,11 @@ export default function App() {
                       lineHeight: 1.1,
                       fontWeight: "700",
                       whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
                     }}
                   >
                     {getSeverityShortLabel(crew.risk_score)}
                   </span>
+
                   <span
                     style={{
                       width: "30px",
@@ -288,10 +323,29 @@ export default function App() {
                 </div>
               </div>
 
-              <p><strong>Last seen:</strong> {crew.last_seen_minutes} min ago</p>
-              <p><strong>Battery:</strong> {crew.battery}%</p>
-              <p><strong>Primary reason:</strong> {crew.primary_reason}</p>
-              <p><strong>Comms summary:</strong> {crew.transcript}</p>
+              <p>
+                <strong>Last seen:</strong> {crew.last_seen_minutes} min ago
+              </p>
+
+              <p>
+                <strong>Battery:</strong> {crew.battery}%
+              </p>
+
+              <p>
+                <strong>Latitude:</strong> {crew.lat}
+              </p>
+
+              <p>
+                <strong>Longitude:</strong> {crew.lon}
+              </p>
+
+              <p>
+                <strong>Primary reason:</strong> {crew.primary_reason}
+              </p>
+
+              <p>
+                <strong>Comms summary:</strong> {crew.transcript}
+              </p>
 
               {crew.last_seen_minutes > 5 && (
                 <p
@@ -312,6 +366,28 @@ export default function App() {
           ))}
         </aside>
       </section>
+
+      {!isRiskPanelOpen && (
+        <button
+          type="button"
+          onClick={() => setIsRiskPanelOpen(true)}
+          style={{
+            position: "absolute",
+            top: "96px",
+            right: "16px",
+            zIndex: 901,
+            border: "2px solid #205493",
+            background: "#ffffff",
+            color: "#112e51",
+            borderRadius: "999px",
+            padding: "8px 12px",
+            fontWeight: "700",
+            cursor: "pointer",
+          }}
+        >
+          Risk Descriptions
+        </button>
+      )}
 
       <aside
         aria-hidden={!isRiskPanelOpen}
@@ -344,11 +420,17 @@ export default function App() {
             background: "linear-gradient(180deg, #f5f9fe 0%, #edf3fa 100%)",
           }}
         >
-          <div>
-            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#112e51" }}>
-              Risk Descriptions
-            </p>
-          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "18px",
+              fontWeight: "700",
+              color: "#112e51",
+            }}
+          >
+            Risk Descriptions
+          </p>
+
           <button
             type="button"
             onClick={() => setIsRiskPanelOpen(false)}
@@ -365,7 +447,17 @@ export default function App() {
             Close
           </button>
         </div>
-        <div style={{ padding: "10px 12px", overflowY: "auto", maxHeight: "calc(80vh - 58px)", display: "grid", gap: "8px", background: "#fcfdff" }}>
+
+        <div
+          style={{
+            padding: "10px 12px",
+            overflowY: "auto",
+            maxHeight: "calc(80vh - 58px)",
+            display: "grid",
+            gap: "8px",
+            background: "#fcfdff",
+          }}
+        >
           {severityLevels.map((item) => (
             <div
               key={`risk-panel-${item.level}`}
@@ -391,40 +483,25 @@ export default function App() {
                   justifyContent: "center",
                   fontWeight: "700",
                   background: getSeverityColor(item.level),
-                  boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.2)",
                 }}
               >
                 {item.level}
               </div>
-              <p style={{ margin: 0, color: "#1b1b1b", lineHeight: 1.25, fontSize: "14px" }}>
+
+              <p
+                style={{
+                  margin: 0,
+                  color: "#1b1b1b",
+                  lineHeight: 1.25,
+                  fontSize: "14px",
+                }}
+              >
                 {item.description}
               </p>
             </div>
           ))}
         </div>
       </aside>
-
-      {!isRiskPanelOpen && (
-        <button
-          type="button"
-          onClick={() => setIsRiskPanelOpen(true)}
-          style={{
-            position: "absolute",
-            top: "96px",
-            right: "16px",
-            zIndex: 901,
-            border: "2px solid #205493",
-            background: "#ffffff",
-            color: "#112e51",
-            borderRadius: "999px",
-            padding: "8px 12px",
-            fontWeight: "700",
-            cursor: "pointer",
-          }}
-        >
-          Risk Descriptions
-        </button>
-      )}
 
       <aside
         aria-hidden={selectedCrew === null}
@@ -456,13 +533,22 @@ export default function App() {
           }}
         >
           <div>
-            <p style={{ margin: 0, fontSize: "12px", textTransform: "uppercase", color: "#3d4551" }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "12px",
+                textTransform: "uppercase",
+                color: "#3d4551",
+              }}
+            >
               Crew Detail
             </p>
+
             <h3 style={{ margin: "4px 0 0 0", color: "#112e51" }}>
               {selectedCrew ? selectedCrew.unit_id : "Crew"}
             </h3>
           </div>
+
           <button
             type="button"
             onClick={() => setSelectedCrewId(null)}
@@ -480,7 +566,14 @@ export default function App() {
           </button>
         </div>
 
-        <div style={{ padding: "14px 16px 20px 16px", overflowY: "auto", display: "grid", gap: "10px" }}>
+        <div
+          style={{
+            padding: "14px 16px 20px 16px",
+            overflowY: "auto",
+            display: "grid",
+            gap: "10px",
+          }}
+        >
           {selectedCrew && (
             <div
               style={{
@@ -489,15 +582,55 @@ export default function App() {
                 padding: "12px",
                 background: "#f8fbff",
                 display: "grid",
-                gap: "6px",
+                gap: "8px",
               }}
             >
-              <p style={{ margin: 0 }}><strong>Unit:</strong> {selectedCrew.unit_id}</p>
-              <p style={{ margin: 0 }}><strong>Risk:</strong> {selectedCrew.risk_score}/10</p>
-              <p style={{ margin: 0 }}><strong>Last seen:</strong> {selectedCrew.last_seen_minutes} min ago</p>
-              <p style={{ margin: 0 }}><strong>Battery:</strong> {selectedCrew.battery}%</p>
-              <p style={{ margin: 0 }}><strong>Primary reason:</strong> {selectedCrew.primary_reason}</p>
-              <p style={{ margin: 0 }}><strong>Comms summary:</strong> {selectedCrew.transcript}</p>
+              <p style={{ margin: 0 }}>
+                <strong>Unit:</strong> {selectedCrew.unit_id}
+              </p>
+
+              <p style={{ margin: 0 }}>
+                <strong>Risk:</strong> {selectedCrew.risk_score}/10 —{" "}
+                {getSeverityShortLabel(selectedCrew.risk_score)}
+              </p>
+
+              <p style={{ margin: 0 }}>
+                <strong>Last seen:</strong> {selectedCrew.last_seen_minutes} min ago
+              </p>
+
+              <p style={{ margin: 0 }}>
+                <strong>Battery:</strong> {selectedCrew.battery}%
+              </p>
+
+              <p style={{ margin: 0 }}>
+                <strong>Latitude:</strong> {selectedCrew.lat}
+              </p>
+
+              <p style={{ margin: 0 }}>
+                <strong>Longitude:</strong> {selectedCrew.lon}
+              </p>
+
+              <p style={{ margin: 0 }}>
+                <strong>Primary reason:</strong> {selectedCrew.primary_reason}
+              </p>
+
+              <p style={{ margin: 0 }}>
+                <strong>Comms summary:</strong> {selectedCrew.transcript}
+              </p>
+
+              <p
+                style={{
+                  marginTop: "8px",
+                  padding: "10px",
+                  background: "#eef6ff",
+                  borderLeft: "4px solid #205493",
+                  color: "#112e51",
+                  fontWeight: "600",
+                }}
+              >
+                Suggested command review: verify crew status, confirm visibility,
+                and review nearest escape route options before issuing direction.
+              </p>
             </div>
           )}
         </div>
