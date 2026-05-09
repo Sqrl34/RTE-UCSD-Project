@@ -1,28 +1,37 @@
-require("dotenv").config();
+const path = require('path')
+const dotenv = require('dotenv')
 
-const express = require("express");
-const cors = require("cors");
+const backendRoot = path.join(__dirname, '..')
+dotenv.config({ path: path.join(backendRoot, '.venv', '.env') })
+dotenv.config({ path: path.join(backendRoot, '.env') })
 
-const crewRoutes = require("./routes/crews");
-const exportRoutes = require("./routes/exports");
+const express = require('express')
+const cors = require('cors')
 
-const app = express();
+const weatherRouter = require('./routes/weatherRoutes')
+const crewRoutes = require('./routes/crews')
+const exportRoutes = require('./routes/exports')
+const classificationRoutes = require('./routes/classification')
 
-app.use(cors());
-app.use(express.json());
+const app = express()
+const port = process.env.PORT || 5000
 
-app.get("/", (req, res) => {
-  res.json({
-    name: "Crew Trace Backend",
-    status: "running"
-  });
-});
+app.use(cors())
+app.use(express.json())
 
-app.use("/api/crews", crewRoutes);
-app.use("/api/export", exportRoutes);
+app.get('/', (_req, res) => {
+  res.json({ service: 'backend', health: '/health', weather: '/weather' })
+})
 
-const PORT = process.env.PORT || 5000;
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' })
+})
 
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
-});
+app.use('/weather', weatherRouter)
+app.use('/api/crews', crewRoutes)
+app.use('/api/export', exportRoutes)
+app.use('/api/classification', classificationRoutes)
+
+app.listen(port, () => {
+  console.log(`Backend API listening on http://localhost:${port}`)
+})
