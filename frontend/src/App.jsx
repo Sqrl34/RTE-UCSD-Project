@@ -142,22 +142,6 @@ export default function App() {
     [mergedCrews]
   );
 
-  const highRiskCount = useMemo(
-    () =>
-      mergedCrews.filter(
-        (crew) =>
-          crew.riskSource !== "pending" &&
-          Number.isFinite(Number(crew.risk_score)) &&
-          Number(crew.risk_score) >= 7
-      ).length,
-    [mergedCrews]
-  );
-
-  const staleCrewCount = useMemo(
-    () => mergedCrews.filter((crew) => crew.last_seen_minutes > 5).length,
-    [mergedCrews]
-  );
-
   const highestRiskCrew = useMemo(() => {
     return [...mergedCrews].sort((a, b) => {
       const sa = Number(a.risk_score);
@@ -234,7 +218,8 @@ export default function App() {
         height: "100vh",
         background: "#f5f5f5",
         color: "#1b1b1b",
-        fontFamily: '"Source Sans Pro", "Segoe UI", Arial, sans-serif',
+        fontFamily:
+          '"Source Sans 3", "Source Sans Pro", "Segoe UI", Arial, sans-serif',
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -252,69 +237,48 @@ export default function App() {
       >
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto",
-            gap: "20px",
-            alignItems: "center",
             width: "100%",
+            textAlign: "center",
           }}
         >
-          <div>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "12px",
-                letterSpacing: "1.4px",
-                textTransform: "uppercase",
-                fontWeight: "800",
-                color: "#d9e8f6",
-              }}
-            >
-              CrewTrace Incident Operations Dashboard
-            </p>
-
-            <h1
-              style={{
-                fontSize: "44px",
-                lineHeight: 1,
-                fontWeight: "900",
-                margin: "6px 0 8px 0",
-                color: "#ffffff",
-              }}
-            >
-              Crew Trace
-            </h1>
-
-            <p
-              style={{
-                fontSize: "17px",
-                lineHeight: 1.35,
-                color: "#d9e8f6",
-                margin: 0,
-              }}
-            >
-              AI-assisted wildfire situational awareness with live crew
-              locations, risk scores, weather context, and escape route
-              guidance.
-            </p>
-          </div>
-
-          <div
+          <p
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 110px)",
-              gap: "12px",
+              margin: 0,
+              fontSize: "12px",
+              letterSpacing: "1.2px",
+              textTransform: "uppercase",
+              fontWeight: "700",
+              color: "#d9e8f6",
             }}
           >
-            <MetricCard label="Crews" value={mergedCrews.length} color="#005ea8" />
-            <MetricCard label="High Risk" value={highRiskCount} color="#c05600" />
-            <MetricCard label="Stale" value={staleCrewCount} color="#b50909" />
-            <MetricCard
-              label="Analyzing"
-              value={analysisPendingCount}
-              color="#005ea8"
-            />
-          </div>
+            CrewTrace Incident Operations Dashboard
+          </p>
+
+          <h1
+            style={{
+              fontSize: "44px",
+              lineHeight: 1,
+              fontWeight: "800",
+              margin: "6px 0 10px 0",
+              color: "#ffffff",
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Crew Trace
+          </h1>
+
+          <p
+            style={{
+              fontSize: "18px",
+              lineHeight: 1.4,
+              color: "#d9e8f6",
+              margin: 0,
+              fontWeight: "400",
+            }}
+          >
+            AI-assisted wildfire situational awareness with live crew locations,
+            risk scores, weather context, and escape route guidance.
+          </p>
         </div>
       </header>
 
@@ -538,9 +502,10 @@ export default function App() {
                   <h2
                     style={{
                       fontSize: "23px",
-                      fontWeight: "900",
+                      fontWeight: "800",
                       margin: 0,
                       color: "#112f4e",
+                      letterSpacing: "-0.02em",
                     }}
                   >
                     {crew.unit_id}
@@ -1271,44 +1236,6 @@ function CameraCard({ crew, mockCameraFire }) {
       >
         Open camera image
       </a>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, color }) {
-  return (
-    <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid rgba(255, 255, 255, 0.35)",
-        borderRadius: "4px",
-        padding: "10px 12px",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
-      }}
-    >
-      <p
-        style={{
-          margin: 0,
-          fontSize: "11px",
-          color: "#565c65",
-          fontWeight: 800,
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-        }}
-      >
-        {label}
-      </p>
-
-      <p
-        style={{
-          margin: "4px 0 0",
-          fontSize: "26px",
-          fontWeight: 900,
-          color,
-        }}
-      >
-        {value}
-      </p>
     </div>
   );
 }
