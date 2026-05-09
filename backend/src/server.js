@@ -8,6 +8,7 @@ dotenv.config({ path: path.join(backendRoot, ".env", ".env") });
 const express = require("express");
 const cors = require("cors");
 
+const { sanitizeForLogs } = require("./lib/sanitizeForLogs");
 const crewRoutes = require("./routes/crews");
 const exportRoutes = require("./routes/exports");
 const classificationRoutes = require("./routes/classification");
@@ -26,6 +27,7 @@ app.get("/", (req, res) => {
     endpoints: {
       health: "GET /health",
       analyzeCrew: "POST /api/crews/analyze",
+      analyzeBatch: "POST /api/crews/analyze-batch — body: { crews: [{ unit_id, lat, lon }] }",
       latestCrews: "GET /api/crews/latest",
       classification: "POST /api/classification",
       weatherFused: "POST /api/weather/fused",
@@ -55,7 +57,10 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error("Unhandled server error:", err);
+  console.error(
+    "Unhandled server error:",
+    sanitizeForLogs(err?.message || String(err))
+  );
 
   res.status(500).json({
     error: "Internal server error"

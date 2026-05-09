@@ -1,3 +1,5 @@
+const { sanitizeForLogs } = require('./lib/sanitizeForLogs')
+
 const NOAA_POINTS_URL = 'https://api.weather.gov/points'
 const NASA_POWER_URL = 'https://power.larc.nasa.gov/api/temporal/hourly/point'
 const OWM_WEATHER_URL = 'https://api.openweathermap.org/data/2.5/weather'
@@ -97,7 +99,7 @@ async function fetchJson(url, options = {}) {
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status} from ${url}`)
+      throw new Error(`HTTP ${response.status} from ${sanitizeForLogs(url)}`)
     }
 
     return await response.json()
@@ -382,7 +384,8 @@ async function buildFusedWeather(lat, lon) {
 
   settled.forEach((result, i) => {
     if (result.status === 'rejected') {
-      console.error(`[weather] ${sourceLabels[i]} failed: ${result.reason?.message || result.reason}`)
+      const msg = result.reason?.message || result.reason
+      console.error(`[weather] ${sourceLabels[i]} failed: ${sanitizeForLogs(msg)}`)
     } else {
       console.log(`[weather] ${sourceLabels[i]} ok (observedAt: ${result.value.observedAt})`)
     }
@@ -395,7 +398,9 @@ async function buildFusedWeather(lat, lon) {
   if (datasets.length === 0) {
     const reasons = settled
       .filter((result) => result.status === 'rejected')
-      .map((result) => result.reason?.message || String(result.reason))
+      .map((result) =>
+        sanitizeForLogs(result.reason?.message || String(result.reason))
+      )
     throw new Error(`All weather providers failed: ${reasons.join(' | ')}`)
   }
 

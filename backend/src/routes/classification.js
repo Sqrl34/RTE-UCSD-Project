@@ -1,4 +1,5 @@
 const express = require("express");
+const { sanitizeForLogs } = require("../lib/sanitizeForLogs");
 const sharp = require("sharp");
 const FormData = require("form-data");
 
@@ -17,7 +18,10 @@ const ROBOFLOW_CONFIDENCE = Math.round(
 
 // Smaller radius + camera cap to reduce noise and API calls
 const MAX_DISTANCE_MILES = 5;
-const MAX_CAMERAS = 5;
+const MAX_CAMERAS = Math.min(
+  10,
+  Math.max(1, Number(process.env.CLASSIFICATION_MAX_CAMERAS) || 3)
+);
 
 if (!process.env.ROBOFLOW_API_KEY) {
   console.warn("ROBOFLOW_API_KEY is missing. Set it in backend/.env");
@@ -89,25 +93,28 @@ async function postToRoboflow(imageBuffer) {
 }
 
 function buildCropRegions(width, height) {
-  const halfW = Math.floor(width / 2);
-  const halfH = Math.floor(height / 2);
+  // Default: one full-frame crop = 1 Roboflow call per camera (set CLASSIFICATION_MULTI_CROP=true for legacy 6-crop mode).
+  if (process.env.CLASSIFICATION_MULTI_CROP === "true") {
+    const halfW = Math.floor(width / 2);
+    const halfH = Math.floor(height / 2);
+    const centerW = Math.floor(width * 0.6);
+    const centerH = Math.floor(height * 0.6);
+    return [
+      { left: 0, top: 0, width, height },
+      { left: 0, top: 0, width, height: halfH },
+      { left: 0, top: halfH, width, height: height - halfH },
+      { left: 0, top: 0, width: halfW, height },
+      { left: halfW, top: 0, width: width - halfW, height },
+      {
+        left: Math.floor((width - centerW) / 2),
+        top: Math.floor((height - centerH) / 2),
+        width: centerW,
+        height: centerH,
+      },
+    ];
+  }
 
-  const centerW = Math.floor(width * 0.6);
-  const centerH = Math.floor(height * 0.6);
-
-  return [
-    { left: 0, top: 0, width, height },
-    { left: 0, top: 0, width, height: halfH },
-    { left: 0, top: halfH, width, height: height - halfH },
-    { left: 0, top: 0, width: halfW, height },
-    { left: halfW, top: 0, width: width - halfW, height },
-    {
-      left: Math.floor((width - centerW) / 2),
-      top: Math.floor((height - centerH) / 2),
-      width: centerW,
-      height: centerH,
-    },
-  ];
+  return [{ left: 0, top: 0, width, height }];
 }
 
 async function makeCrop(originalBuffer, region) {
@@ -285,7 +292,10 @@ router.post("/", async (req, res) => {
       cameras,
     });
   } catch (err) {
-    console.error("classification error:", err);
+    console.error(
+      "classification error:",
+      sanitizeForLogs(err?.message || String(err))
+    );
     return res.status(500).json({ error: "internal server error" });
   }
 });

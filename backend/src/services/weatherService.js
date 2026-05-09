@@ -1,5 +1,11 @@
 const mockWeather = require("../data/mockWeather.json");
 const { buildFusedWeather } = require("../weatherFusion");
+const { sanitizeForLogs } = require("../lib/sanitizeForLogs");
+const { geoBucketKey } = require("./geoBucket");
+
+const weatherCache = new Map();
+const WEATHER_CACHE_TTL_MS =
+  Number(process.env.WEATHER_CACHE_TTL_MS) || 10 * 60 * 1000;
 
 function degreesToCardinal(deg) {
   if (deg == null || !Number.isFinite(Number(deg))) return "unknown";
@@ -10,22 +16,47 @@ function degreesToCardinal(deg) {
   return directions[index];
 }
 
-async function getWeatherForCoordinates(lat, lon) {
+function attachWeatherCoords(weather, lat, lon) {
+  const raw = weather.raw
+    ? { ...weather.raw, lat, lon }
+    : weather.raw;
+  return {
+    ...weather,
+    lat,
+    lon,
+    raw,
+  };
+}
+
+async function getWeatherForCoordinatesUncached(lat, lon) {
   try {
     const rawWeather = await buildFusedWeather(lat, lon);
     return normalizeWeather(rawWeather, lat, lon);
   } catch (error) {
-    console.error("Weather integration failed:", error.message);
+    console.error("Weather integration failed:", sanitizeForLogs(error.message));
 
     return normalizeWeather(
       {
         ...mockWeather,
-        source: "mock_weather_fallback"
+        source: "mock_weather_fallback",
       },
       lat,
       lon
     );
   }
+}
+
+async function getWeatherForCoordinates(lat, lon) {
+  const key = geoBucketKey(lat, lon);
+  const now = Date.now();
+  const hit = weatherCache.get(key);
+  if (hit && now - hit.at < WEATHER_CACHE_TTL_MS) {
+    return attachWeatherCoords(hit.payload, lat, lon);
+  }
+
+  const payload = await getWeatherForCoordinatesUncached(lat, lon);
+  weatherCache.set(key, { at: now, payload });
+  return attachWeatherCoords(payload, lat, lon);
 }
 
 function normalizeWeather(raw, lat, lon) {
@@ -62,5 +93,5 @@ function normalizeWeather(raw, lat, lon) {
 }
 
 module.exports = {
-  getWeatherForCoordinates
+  getWeatherForCoordinates,
 };

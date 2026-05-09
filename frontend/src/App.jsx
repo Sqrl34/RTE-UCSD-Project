@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import FireMap from "./components/FireMap";
-import { analyzeCrew, getApiBaseUrl } from "./api/crewTraceApi";
+import { getApiBaseUrl } from "./api/crewTraceApi";
+import { analyzeCrewBatchDeduped } from "./lib/analyzeBatchSingleton";
 import { applyAnalysisToMock } from "./lib/mergeCrewAnalysis";
 import { mockCrews } from "./data/mockCrews";
 import {
@@ -66,32 +67,34 @@ export default function App() {
     let cancelled = false;
     const API_BASE = getApiBaseUrl();
 
-    mockCrews.forEach((crew) => {
-      analyzeCrew(API_BASE, {
-        unit_id: crew.unit_id,
-        lat: crew.lat,
-        lon: crew.lon,
-      })
-        .then((data) => {
-          if (cancelled) return;
+    analyzeCrewBatchDeduped(API_BASE, mockCrews)
+      .then((results) => {
+        if (cancelled) return;
 
-          setAnalysisByUnitId((prev) => ({
-            ...prev,
-            [crew.unit_id]: { status: "ok", data },
-          }));
-        })
-        .catch((err) => {
-          if (cancelled) return;
-
-          setAnalysisByUnitId((prev) => ({
-            ...prev,
-            [crew.unit_id]: {
-              status: "error",
-              message: err.message || "Analyze request failed",
-            },
-          }));
+        setAnalysisByUnitId((prev) => {
+          const next = { ...prev };
+          for (const row of results) {
+            if (row?.unit_id) {
+              next[row.unit_id] = { status: "ok", data: row };
+            }
+          }
+          return next;
         });
-    });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+
+        setAnalysisByUnitId((prev) => {
+          const next = { ...prev };
+          for (const crew of mockCrews) {
+            next[crew.unit_id] = {
+              status: "error",
+              message: err.message || "Analyze batch failed",
+            };
+          }
+          return next;
+        });
+      });
 
     return () => {
       cancelled = true;
